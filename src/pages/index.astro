@@ -2,10 +2,45 @@
 import Welcome from '../components/Welcome.astro';
 import Layout from '../layouts/Layout.astro';
 
+import { db, Comment } from 'astro:db';
+
+const comments = await db.select().from(Comment);
+
 // Welcome to Astro! Wondering what to do next? Check out the Astro documentation at https://docs.astro.build
 // Don't want to use any of this? Delete everything in this file, the `assets`, `components`, and `layouts` directories, and start fresh.
 ---
 
-<Layout>
-	<Welcome />
-</Layout>
+<Layout seo={{ title: "Page Title" }}>
+	<div slot="sidebar">
+	  <nav>
+		<ul>
+		<h1>Rushes</h1>
+		  <li mb-2><a href="/page1">Page 1</a></li>
+		  <li><a href="/page2">Page 2</a></li>
+		</ul>
+	  </nav>
+	</div>
+	<div>
+	  <p>{
+		comments.map(({ author, body, title }) => (
+		  <article>
+			<p>uploaded by @{author}</p>
+			<p>{body}</p>
+			<p>{title}</p>
+			<img w-full h-70 object-cover src={`https://vz-28fef2ae-79e.b-cdn.net/${body}/seek/_0.jpg`} />
+			{/* <div style="position:relative;padding-top:56.25%;"><iframe src={`https://iframe.mediadelivery.net/embed/346385/${body}?autoplay=false&loop=false&muted=false&preload=true&responsive=true`} loading="lazy" style="border:0;position:absolute;top:0;height:20%;width:20%;" allow="accelerometer;gyroscope;autoplay;encrypted-media;picture-in-picture;" allowfullscreen="true"></iframe></div> */}
+		  </article>
+		))
+	  }</p>
+	</div>
+	<div slot="footer">
+	  <p>Footer content</p>
+	</div>
+  </Layout>
+
+
+  <style>
+
+
+</style>
+

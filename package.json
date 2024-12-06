@@ -9,6 +9,16 @@
     "astro": "astro"
   },
   "dependencies": {
-    "astro": "^5.0.3"
+    "@astrojs/db": "^0.14.3",
+    "@astrojs/sitemap": "^3.2.1",
+    "@unocss/astro": "^0.65.1",
+    "@unocss/preset-wind": "^0.65.1",
+    "@unocss/reset": "^0.65.1",
+    "astro": "^5.0.3",
+    "unocss": "^0.65.1"
+  },
+  "devDependencies": {
+    "@unocss/preset-tagify": "^0.65.1",
+    "@unocss/preset-typography": "^0.65.1"
   }
 }

@@ -1,0 +1,36 @@
+:root {
+  --container-width: 960px;
+  --container-padding: 2rem;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+.layout {
+  display: flex;
+  justify-content: start;
+  min-height: 100vh;
+}
+
+.sidebar {
+  width: 250px; /* Adjust width as needed */
+  background-color: #f4f4f4; /* Example background */
+  padding: 1rem;
+}
+
+ul {
+  padding: 0;
+}
+
+ul li {
+  list-style: none;
+}
+
+.content {
+  flex: 1;
+  padding: 1rem;
+}

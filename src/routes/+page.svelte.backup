@@ -1,0 +1,11 @@
+<script lang="ts">
+</script>
+
+<svelte:head>
+  <title>rushes.fm - Global Video Archive</title>
+  <meta name="description" content="A platform for finding and sharing unedited footage from users around the world. Discover connections through AI-powered content analysis." />
+</svelte:head>
+
+<div class="min-h-screen bg-white dark:bg-black">
+
+</div>

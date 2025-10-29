@@ -237,7 +237,7 @@
 <div class="h-screen overflow-x-hidden overflow-y-scroll bg-[#05060c] font-sans text-[12px] text-slate-200">
 	<div class="mx-auto w-full max-w-7xl space-y-12 px-6 py-12 lg:px-12">
 		<header
-			class="relative overflow-hidden"
+			class="relative overflow-hidden  bg-white/[0.04]"
 		>
 			<!-- <div class="pointer-events-none absolute -right-32 -top-32 h-72 w-72 rounded-full bg-sky-500/20 blur-3xl"></div>
 			<div class="pointer-events-none absolute -bottom-24 -left-24 h-56 w-56 rounded-full bg-purple-500/10 blur-2xl"></div> -->

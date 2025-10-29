@@ -12,7 +12,7 @@
     import { selectedVideo } from "$lib/stores/selectedVideo";
     import MuxVideoPlayer from "$lib/components/MuxVideoPlayer.svelte";
     import VideoTimeline from "$lib/components/VideoTimeline.svelte";
-    import VideoInfoContainer from "$lib/components/VideoInfoContainer.svelte";
+    import VideoInfo from "$lib/components/VideoInfo.svelte";
     import type { LayoutData } from "./$types";
     import type { Video } from "$lib/types/content";
     import {
@@ -40,6 +40,32 @@
     }
 
     const currentVideo = $derived(resolveVideo($selectedVideo.id));
+
+    // VideoInfo data logic (from VideoInfoContainer)
+    interface VideoData {
+        video: Video;
+    }
+
+    function resolveVideoData(id: string | null): VideoData | null {
+        if (!id) return null;
+        if (id === "home") {
+            const fallback = videoLibrary[0];
+            return fallback ? { video: fallback } : null;
+        }
+        const video = lookupVideo(id);
+        return video ? { video } : null;
+    }
+
+    let videoInfoData = $state<VideoData | null>(null);
+    let nextVideo = $state<Video | null>(null);
+
+    $effect(() => {
+        videoInfoData = resolveVideoData($selectedVideo.id);
+
+        // Resolve next video data
+        const nextId = selectedVideo.nextVideoId;
+        nextVideo = nextId ? (lookupVideo(nextId) ?? null) : null;
+    });
 
     function getVideoDuration(video: Video): number {
         const value = video.duration;
@@ -110,7 +136,7 @@
         if (data) {
             initialiseLibrary(data.videos, data.users);
             // Initialize the playback queue with all video IDs
-            const videoIds = data.videos.map((v) => v.id);
+            const videoIds = data.videos.map((v: Video) => v.id);
             selectedVideo.setQueue(videoIds);
         }
     });
@@ -190,7 +216,7 @@
 <div class="min-h-screen w-full overflow-x-hidden transition-colors">
     <div class="flex min-h-screen w-full relative overflow-visible">
         <!-- Sidebar -->
-        <Sidebar isOpen="true" onclose={closeMobileSidebar} />
+        <Sidebar isOpen={true} onclose={closeMobileSidebar} />
 
         <!-- Desktop Now Playing section, live like function with video queue -->
         <div
@@ -204,20 +230,22 @@
                             id="video-aspect-container"
                             class="relative aspect-video w-full border-b border-white/10 bg-black shadow-[0_24px_80px_-48px_rgba(8,47,73,0.85)]"
                         >
-                            <MuxVideoPlayer
-                                class="h-full w-full"
-                                src={currentVideo?.videoUrl}
-                                autoplayUserPreference={true}
-                                startTime={liveStartTime}
-                                playerKey={`sidebar-player-${currentVideo?.id ?? "none"}-${Math.floor(liveStartTime)}`}
-                            />
+                            <div class="h-full w-full">
+                                <MuxVideoPlayer
+                                    src={currentVideo?.videoUrl}
+                                    autoplayUserPreference={true}
+                                    startTime={liveStartTime}
+                                    playerKey={`sidebar-player-${currentVideo?.id ?? "none"}-${Math.floor(liveStartTime)}`}
+                                />
+                            </div>
                         </div>
                     </div>
 
                     <!-- Video Info Container (like Sidebar content in Astro) -->
                     <div id="sidebar-details" class="flex-1">
-                        <VideoTimeline />
-                        <VideoInfoContainer />
+                        {#if videoInfoData}
+                            <VideoInfo data={videoInfoData} />
+                        {/if}
                     </div>
                 </div>
             </div>

@@ -14,12 +14,16 @@
 		"lint": "prettier --check .",
 		"test:unit": "vitest",
 		"test": "npm run test:unit -- --run",
-		"db:push": "drizzle-kit push",
-		"db:generate": "drizzle-kit generate",
-		"db:migrate": "drizzle-kit migrate",
-		"db:studio": "drizzle-kit studio",
+		"db:push": "bun --bun drizzle-kit push",
+		"db:generate": "bun --bun drizzle-kit generate",
+		"db:migrate": "bun --bun drizzle-kit migrate",
+		"db:studio": "bun --bun drizzle-kit studio",
 		"deploy": "npm run build && wrangler deploy",
 		"cf-typegen": "wrangler types ./src/worker-configuration.d.ts"
+	},
+	"devEnvironment": {
+		"PUBLIC_SUPABASE_URL": "https://jmpxnpndvgbbtmvfribf.supabase.co",
+		"PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImptcHhucG5kdmdiYnRtdmZyaWJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk3NTgyMzksImV4cCI6MjA3NTMzNDIzOX0.YFxW3EzucGfo9QSlH0Pcq44hjpXVHH3MDnCYUQj4Im0"
 	},
 	"devDependencies": {
 		"@sveltejs/adapter-cloudflare": "^7.2.4",
@@ -46,6 +50,8 @@
 		"wrangler": "^4.44.0"
 	},
 	"dependencies": {
+		"@supabase/ssr": "^0.7.0",
+		"@supabase/supabase-js": "^2.77.0",
 		"bits-ui": "^2.14.0",
 		"depcheck": "^1.4.7",
 		"dotenv": "^17.2.3",

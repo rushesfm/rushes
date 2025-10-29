@@ -1,9 +1,9 @@
 <script lang="ts">
     import Map from "$lib/components/Map.svelte";
-    import CollapsibleHeading from "$lib/components/CollapsibleHeading.svelte";
     import { getCommentsByVideoId } from "$lib/data/comments";
     import { videosStore } from "$lib/stores/library";
     import type { Video, Comment } from "$lib/types/content";
+    import { goto } from "$app/navigation";
 
     interface VideoData {
         video: Video;
@@ -31,41 +31,17 @@
         0;
     const initialZoom = primaryLocation ? 8 : 2;
 
-    // Section states
-    let isLocationOpen = $state(true);
-    let isMoreVideosOpen = $state(true);
-    let isTranscriptOpen = $state(true);
+    // Row expand states
+    let isSummaryOpen = $state(false);
     let isKeywordsOpen = $state(true);
-    let isNotesOpen = $state(true);
+    let isLocationOpen = $state(true);
+    let isTranscriptOpen = $state(false);
+
+    // Location name from reverse geocoding
+    let locationName = $state<string | null>(null);
 
     // Get comments for this video
     const comments = getCommentsByVideoId(data.video.id);
-
-    const relatedVideos = $derived(
-        $videosStore
-            .filter(
-                (video) =>
-                    video.authorId === data.video.authorId &&
-                    video.id !== data.video.id,
-            )
-            .slice(0, 4),
-    );
-
-    let newComment = $state("");
-
-    // Map icon path
-    const mapIcon =
-        "M8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0M4.5 7.5a.5.5 0 0 1 0 1H3a2 2 0 0 0-2 2v1a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1a2 2 0 0 0-2-2h-1.5a.5.5 0 0 1 0-1h1a.5.5 0 0 1 .5.5v1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-1a.5.5 0 0 1 .5-.5z";
-
-    // Format views count
-    function formatViews(views: number): string {
-        if (views >= 1000000) {
-            return `${(views / 1000000).toFixed(1)}M`;
-        } else if (views >= 1000) {
-            return `${(views / 1000).toFixed(1)}K`;
-        }
-        return views.toString();
-    }
 
     // Format upload date
     function formatUploadDate(date: string): string {
@@ -81,269 +57,341 @@
         if (diffDays < 365) return `${Math.floor(diffDays / 30)} months ago`;
         return `${Math.floor(diffDays / 365)} years ago`;
     }
+
+    // Format full date with time
+    function formatFullDateWithTime(date: string): string {
+        const uploadDate = new Date(date);
+        const dateStr = uploadDate.toLocaleDateString("en-US", {
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+        });
+        const timeStr = uploadDate.toLocaleTimeString("en-US", {
+            hour: "numeric",
+            minute: "2-digit",
+            hour12: true,
+        });
+        return `${dateStr} at ${timeStr}`;
+    }
+
+    // Determine if video was created during day or night (6 AM - 6 PM = day)
+    function isDayTime(date: string): boolean {
+        const uploadDate = new Date(date);
+        const hour = uploadDate.getHours();
+        return hour >= 6 && hour < 18;
+    }
+
+    const uploadDateStr =
+        data.video.uploadDate ||
+        data.video.timestamp ||
+        new Date().toISOString();
+    const isDay = isDayTime(uploadDateStr);
+
+    // Convert keyword to URL slug
+    function keywordToSlug(keyword: string): string {
+        return keyword
+            .toLowerCase()
+            .replace(/[^a-z0-9]+/g, "-")
+            .replace(/^-+|-+$/g, "");
+    }
+
+    // Reverse geocoding to get location name
+    async function fetchLocationName(lat: number, lon: number) {
+        if (!lat || !lon) return;
+        try {
+            const response = await fetch(
+                `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lon}&zoom=10&addressdetails=1`,
+                {
+                    headers: {
+                        "User-Agent": "Rushes Video App",
+                    },
+                },
+            );
+            const data = await response.json();
+            if (data.address) {
+                // Try to get city, then town, then village, then region
+                const city =
+                    data.address.city ||
+                    data.address.town ||
+                    data.address.village ||
+                    data.address.municipality;
+                const region = data.address.state || data.address.region;
+                if (city && region) {
+                    locationName = `${city}, ${region}`;
+                } else if (city) {
+                    locationName = city;
+                } else if (region) {
+                    locationName = region;
+                } else {
+                    locationName = data.address.country || "Unknown location";
+                }
+            }
+        } catch (error) {
+            console.warn("Failed to fetch location name:", error);
+        }
+    }
+
+    // Fetch location name when component loads or location changes
+    $effect(() => {
+        if (dummyLocations.length > 0 && initialCenterLat !== 0 && initialCenterLon !== 0) {
+            fetchLocationName(initialCenterLat, initialCenterLon);
+        }
+    });
 </script>
 
-<div
-    class="w-full transition-colors"
-    style="font-family: Arial, Helvetica, sans-serif;"
->
-    <div class="pt-6 px-8">
-        <!-- Video Metadata -->
-        <!-- <div class="flex items-center gap-4 text-sm text-neutral-400 mb-4">
-      <div class="flex items-center gap-1">
-        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" fill="currentColor" viewBox="0 0 16 16">
-          <path d="M8 3.5a.5.5 0 0 0-1 0V9a.5.5 0 0 0 .252.434l3.5 2a.5.5 0 0 0 .496-.868L8 8.71V3.5z"/>
-          <path d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm7-8A7 7 0 1 1 1 8a7 7 0 0 1 14 0z"/>
-        </svg>
-        <span>{data.video.duration}</span>
-      </div>
+<div class="w-full transition-colors" style="font-family: Arial, Helvetica, sans-serif;">
+    <div class=" px-8">
+        <div class="space-y-0">
+            <!-- Author Row -->
+            <div class="border-b border-white/10 py-3">
+                <div class="flex items-center gap-2">
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="16"
+                        height="16"
+                        fill="currentColor"
+                        viewBox="0 0 16 16"
+                        class="text-white/70"
+                    >
+                        <path
+                            d="M8 8a3 3 0 1 0 0-6 3 3 0 0 0 0 6zm2-3a2 2 0 1 1-4 0 2 2 0 0 1 4 0zm4 8c0 1-1 1-1 1H3s-1 0-1-1 1-4 6-4 6 3 6 4zm-1-.004c-.001-.246-.154-.986-.832-1.664C11.516 10.68 10.289 10 8 10c-2.29 0-3.516.68-4.168 1.332-.678.678-.83 1.418-.832 1.664h10z"
+                        />
+                    </svg>
+                    <span class="text-sm font-medium text-white/90">Author</span>
+                    <a
+                        href={`/users/${data.video.authorId}`}
+                        class="text-sm text-white/70 hover:text-white transition-colors ml-auto"
+                    >
+                        {data.video.author}
+                    </a>
+                </div>
+            </div>
 
+            <!-- Date Row with Day/Night -->
+            <div class="border-b border-white/10 py-3">
+                <div class="flex items-center gap-2">
+                    <!-- Calendar icon -->
+                    <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" class="w-4 h-4" viewBox="0 0 24 24"><!-- Icon from Tabler Icons by Paweł Kuna - https://github.com/tabler/tabler-icons/blob/master/LICENSE --><path fill="currentColor" d="M12 19a1 1 0 0 1 .993.883L13 20v1a1 1 0 0 1-1.993.117L11 21v-1a1 1 0 0 1 1-1m6.313-2.09l.094.083l.7.7a1 1 0 0 1-1.32 1.497l-.094-.083l-.7-.7a1 1 0 0 1 1.218-1.567zm-11.306.083a1 1 0 0 1 .083 1.32l-.083.094l-.7.7a1 1 0 0 1-1.497-1.32l.083-.094l.7-.7a1 1 0 0 1 1.414 0M4 11a1 1 0 0 1 .117 1.993L4 13H3a1 1 0 0 1-.117-1.993L3 11zm17 0a1 1 0 0 1 .117 1.993L21 13h-1a1 1 0 0 1-.117-1.993L20 11zM6.213 4.81l.094.083l.7.7a1 1 0 0 1-1.32 1.497l-.094-.083l-.7-.7A1 1 0 0 1 6.11 4.74zm12.894.083a1 1 0 0 1 .083 1.32l-.083.094l-.7.7a1 1 0 0 1-1.497-1.32l.083-.094l.7-.7a1 1 0 0 1 1.414 0M12 2a1 1 0 0 1 .993.883L13 3v1a1 1 0 0 1-1.993.117L11 4V3a1 1 0 0 1 1-1m0 5a5 5 0 1 1-4.995 5.217L7 12l.005-.217A5 5 0 0 1 12 7"/></svg>
+                  
+                    <span class="text-sm font-medium text-white/90">Date</span>
+                    <span class="text-sm text-white/70 ml-auto">
+                        {formatFullDateWithTime(uploadDateStr)}
+                    </span>
+                </div>
+            </div>
 
-    </div> -->
-
-        <div
-            class="description md:bg-slate-100/5 border border-white/5 md:rounded-lg md:p-6 mb-6"
-        >
-            <div
-                class="flex items-center pb-2 justify-between border-b border-white/10 mb-2 pb-4"
-            >
-                <a
-                    class="text-white text-xs"
-                    href={`/users/${data.video.authorId}`}
-                    >{data.video.author}</a
+            <!-- Summary Row -->
+            <div class="border-b border-white/10">
+                <button
+                    onclick={() => (isSummaryOpen = !isSummaryOpen)}
+                    class="w-full py-3 flex items-center gap-2 hover:bg-white/5 transition-colors"
                 >
-
-                <div class="flex items-center gap-1 text-white">
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" class="w-4 h-4"   viewBox="0 0 24 24"><!-- Icon from Tabler Icons by Paweł Kuna - https://github.com/tabler/tabler-icons/blob/master/LICENSE --><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h10M4 18h14"/></svg>
+                    <span class="text-sm font-medium text-white/90">Summary</span>
                     <svg
                         xmlns="http://www.w3.org/2000/svg"
                         width="14"
                         height="14"
                         fill="currentColor"
                         viewBox="0 0 16 16"
+                        class="text-white/70 ml-auto transition-transform {isSummaryOpen
+                            ? 'rotate-45'
+                            : ''}"
                     >
-                        <path
-                            d="M8 3.5a.5.5 0 0 0-1 0V9a.5.5 0 0 0 .252.434l3.5 2a.5.5 0 0 0 .496-.868L8 8.71V3.5z"
-                        />
-                        <path
-                            d="M8 16A8 8 0 1 0 8 0a8 8 0 0 0 0 16zm7-8A7 7 0 1 1 1 8a7 7 0 0 1 14 0z"
-                        />
+                        <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z" />
                     </svg>
-                    <span class="text-xs"
-                        >Uploaded {formatUploadDate(
-                            data.video.uploadDate ||
-                                data.video.timestamp ||
-                                new Date().toISOString(),
-                        )}</span
-                    >
-                </div>
+                </button>
+                {#if isSummaryOpen}
+                    <div class="pb-3 ">
+                        {#if data.video.description}
+                            <p class="text-sm text-white/70 leading-relaxed">
+                                {data.video.description}
+                            </p>
+                        {:else}
+                            <p class="text-sm text-white/50">
+                                No description available.
+                            </p>
+                        {/if}
+                    </div>
+                {/if}
             </div>
 
-            <p class="text-sm dark:text-neutral-400 leading-relaxed">
-                {data.video.description}
-            </p>
-        </div>
-
-        <!-- Location Section -->
-        <div
-            class="location md:bg-slate-100/5 border border-white/5 md:rounded-lg md:p-6 mb-6"
-        >
-            <CollapsibleHeading
-                title="Location"
-                bind:isOpen={isLocationOpen}
-                actionButton={{
-                    text: "View on map",
-                    icon: mapIcon,
-                    href: `/map?lat=${initialCenterLat}&lon=${initialCenterLon}&zoom=${initialZoom}`,
-                }}
-            >
-                {#if dummyLocations.length}
-                    <div class="h-[400px] rounded-lg overflow-hidden mb-3">
-                        <Map
-                            locations={dummyLocations}
-                            {initialCenterLon}
-                            {initialCenterLat}
-                            {initialZoom}
-                        />
-                    </div>
-                    <div
-                        class="flex items-center gap-2 text-sm text-neutral-400"
-                    >
+            <!-- Keywords Row -->
+            <div class="border-b border-white/10">
+                <button
+                    onclick={() => (isKeywordsOpen = !isKeywordsOpen)}
+                    class="w-full py-3 flex items-center gap-2 hover:bg-white/5 transition-colors"
+                >
+                <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" class="w-4 h-4" viewBox="0 0 24 24"><!-- Icon from Tabler Icons by Paweł Kuna - https://github.com/tabler/tabler-icons/blob/master/LICENSE --><g fill="currentColor"><path d="M9.172 5a3 3 0 0 1 2.121.879l5.71 5.71a3.41 3.41 0 0 1 0 4.822l-3.592 3.592a3.41 3.41 0 0 1-4.822 0l-5.71-5.71A3 3 0 0 1 2 12.172V8a3 3 0 0 1 3-3zM7 9h-.01A1 1 0 1 0 7 11a1 1 0 0 0 0-2"/><path d="M14.293 5.293a1 1 0 0 1 1.414 0L20.3 9.885a5.82 5.82 0 0 1 0 8.23l-1.592 1.592a1 1 0 0 1-1.414-1.414l1.592-1.592a3.82 3.82 0 0 0 0-5.402l-4.592-4.592a1 1 0 0 1 0-1.414"/></g></svg>
+                    <span class="text-sm font-medium text-white/90">Keywords</span>
+                    <div class="flex items-center gap-2 ml-auto">
+                        {#if (data.video.keywords ?? []).length > 0}
+                            <span class="text-xs text-white/50">
+                                {(data.video.keywords ?? []).length} keyword{(data.video.keywords ?? []).length === 1
+                                    ? ""
+                                    : "s"}
+                            </span>
+                        {/if}
                         <svg
                             xmlns="http://www.w3.org/2000/svg"
                             width="14"
                             height="14"
                             fill="currentColor"
                             viewBox="0 0 16 16"
+                            class="text-white/70 transition-transform {isKeywordsOpen
+                                ? 'rotate-45'
+                                : ''}"
                         >
-                            <path d={mapIcon} />
+                            <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z" />
                         </svg>
-                        <span>[{initialCenterLat}, {initialCenterLon}]</span>
                     </div>
-                {:else}
-                    <p class="text-sm text-neutral-400">
-                        No location data available for this video.
-                    </p>
-                {/if}
-            </CollapsibleHeading>
-
-            <!-- More Videos Section -->
-            <CollapsibleHeading
-                title={`More from ${data.video.author}`}
-                bind:isOpen={isMoreVideosOpen}
-                actionButton={{
-                    text: "View all",
-                }}
-            >
-                {#if relatedVideos.length}
-                    <div class="grid grid-cols-2 gap-3">
-                        {#each relatedVideos as related}
-                            <a
-                                class="relative aspect-video rounded-lg overflow-hidden bg-white/10 group"
-                                href={`/videos/${related.id}`}
-                            >
-                                <img
-                                    src={related.thumbnailUrl ??
-                                        "https://placehold.co/400x225?text=Video"}
-                                    alt={related.title}
-                                    class="w-full h-full object-cover"
-                                />
-                                <div
-                                    class="absolute bottom-0 left-0 right-0 p-2 bg-gradient-to-t from-black/80 to-transparent"
-                                >
-                                    <p class="text-xs text-white">
-                                        {related.title}
-                                    </p>
-                                    <p class="text-xs text-neutral-400">
-                                        {related.duration ?? "0:00"}
-                                    </p>
-                                </div>
-                            </a>
-                        {/each}
+                </button>
+                {#if isKeywordsOpen}
+                    <div class="pb-3 ">
+                        {#if (data.video.keywords ?? []).length > 0}
+                            <div class="flex flex-wrap gap-2">
+                                    {#each data.video.keywords ?? [] as keyword}
+                                        <a
+                                            href="/browse/{keywordToSlug(keyword)}"
+                                            class="px-3 py-1 text-sm border border-white/20 hover:bg-white/20 text-neutral-300 text-xs rounded-full transition-colors"
+                                        >
+                                        {keyword}
+                                    </a>
+                                {/each}
+                            </div>
+                        {:else}
+                            <p class="text-sm text-white/50">
+                                No keywords available.
+                            </p>
+                        {/if}
                     </div>
-                {:else}
-                    <p class="text-sm text-neutral-400">
-                        No additional videos from this creator yet.
-                    </p>
                 {/if}
-            </CollapsibleHeading>
+            </div>
 
-            <!-- Transcript Section -->
-            <CollapsibleHeading
-                title="Transcript"
-                bind:isOpen={isTranscriptOpen}
-                actionButton={{
-                    text: "Copy",
-                }}
-            >
-                <div class="text-sm text-neutral-400 leading-relaxed">
-                    <p>
-                        {data.video.transcript ?? "Transcript not available."}
-                    </p>
-                </div>
-            </CollapsibleHeading>
-
-            <!-- Keywords Section -->
-
-            <CollapsibleHeading
-                title="Keywords"
-                bind:isOpen={isKeywordsOpen}
-                actionButton={{
-                    text: "View all",
-                }}
-            >
-                <div class="flex flex-wrap gap-2">
-                    {#each data.video.keywords ?? [] as keyword}
-                        <a
-                            href="/keywords/{keyword}"
-                            class="px-3 py-1 text-sm bg-white/10 hover:bg-white/20 text-neutral-300 rounded-full transition-colors"
-                        >
-                            {keyword}
-                        </a>
-                    {/each}
-                </div>
-            </CollapsibleHeading>
-
-            <!-- Notes Section -->
-
-            <CollapsibleHeading title="Notes" bind:isOpen={isNotesOpen}>
-                <!-- Comment Input -->
-                <div class="mb-6">
-                    <div class="flex gap-3">
-                        <img
-                            src="https://i.pravatar.cc/150?img=4"
-                            alt="Your avatar"
-                            class="w-8 h-8 rounded-full"
+            <!-- Location Row -->
+            <div class="border-b border-white/10">
+                <button
+                    onclick={() => (isLocationOpen = !isLocationOpen)}
+                    class="w-full py-3 flex items-center gap-3 hover:bg-white/5 transition-colors"
+                >
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="16"
+                        height="16"
+                        fill="currentColor"
+                        viewBox="0 0 16 16"
+                        class="text-white/70"
+                    >
+                        <path
+                            d="M8 16s6-5.686 6-10A6 6 0 0 0 2 6c0 4.314 6 10 6 10zm0-7a3 3 0 1 1 0-6 3 3 0 0 1 0 6z"
                         />
-                        <div class="flex-1">
-                            <textarea
-                                bind:value={newComment}
-                                placeholder="Add a note..."
-                                class="w-full p-3 bg-white/5 border border-black/10 dark:border-white/10 rounded-lg text-sm text-neutral-800 dark:text-neutral-200 placeholder-neutral-400 focus:outline-none focus:ring-2 focus:ring-black/10 dark:focus:ring-white/10 resize-none"
-                                rows="2"
-                            ></textarea>
-                            <div class="flex justify-end mt-2">
-                                <button
-                                    class="px-4 py-1.5 text-sm bg-black dark:bg-white text-white dark:text-black rounded-lg hover:opacity-90 transition-opacity"
-                                    disabled={!newComment.trim()}
-                                >
-                                    Post
-                                </button>
-                            </div>
-                        </div>
+                    </svg>
+                    <span class="text-sm font-medium text-white/90">Location</span>
+                    <div class="flex items-center gap-2 ml-auto">
+                        {#if dummyLocations.length > 0}
+                            <a
+                                href={`/map?lat=${initialCenterLat}&lon=${initialCenterLon}&zoom=${initialZoom}`}
+                                class="text-xs text-white/70 hover:text-white transition-colors cursor-pointer"
+                                onclick={(e) => {
+                                    e.stopPropagation();
+                                }}
+                            >
+                                {locationName || `${initialCenterLat.toFixed(4)}, ${initialCenterLon.toFixed(4)}`}
+                            </a>
+                        {:else}
+                            <span class="text-xs text-white/50">No location</span>
+                        {/if}
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="14"
+                            height="14"
+                            fill="currentColor"
+                            viewBox="0 0 16 16"
+                            class="text-white/70 transition-transform {isLocationOpen
+                                ? 'rotate-45'
+                                : ''}"
+                        >
+                            <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z" />
+                        </svg>
                     </div>
-
-                    <div class="space-y-4">
-                        {#each comments as comment}
-                            <div class="flex gap-3">
-                                <img
-                                    src={comment.avatar}
-                                    alt={comment.user}
-                                    class="w-8 h-8 rounded-full"
+                </button>
+                {#if isLocationOpen}
+                    <div class="pb-3 ">
+                        {#if dummyLocations.length > 0}
+                            <div
+                                class="relative h-[300px] rounded-lg overflow-hidden cursor-pointer"
+                                role="button"
+                                tabindex="0"
+                                onclick={() => {
+                                    goto(`/map?lat=${initialCenterLat}&lon=${initialCenterLon}&zoom=${initialZoom}`);
+                                }}
+                                onkeydown={(e) => {
+                                    if (e.key === "Enter" || e.key === " ") {
+                                        e.preventDefault();
+                                        goto(`/map?lat=${initialCenterLat}&lon=${initialCenterLon}&zoom=${initialZoom}`);
+                                    }
+                                }}
+                            >
+                                <Map
+                                    locations={dummyLocations}
+                                    {initialCenterLon}
+                                    {initialCenterLat}
+                                    {initialZoom}
                                 />
-                                <div class="flex-1">
-                                    <div class="flex items-center gap-2 mb-1">
-                                        <span
-                                            class="text-sm font-medium dark:text-neutral-200"
-                                            >{comment.user}</span
-                                        >
-                                        <span class="text-xs text-neutral-400"
-                                            >{comment.timestamp}</span
-                                        >
-                                    </div>
-                                    <p
-                                        class="text-sm text-neutral-800 dark:text-neutral-200 mb-2"
-                                    >
-                                        {comment.content}
-                                    </p>
-                                    <div class="flex items-center gap-4">
-                                        <button
-                                            class="text-xs text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200 flex items-center gap-1"
-                                        >
-                                            <svg
-                                                xmlns="http://www.w3.org/2000/svg"
-                                                width="14"
-                                                height="14"
-                                                fill="currentColor"
-                                                viewBox="0 0 16 16"
-                                            >
-                                                <path
-                                                    d="M8 0a8 8 0 1 0 0 16A8 8 0 0 0 8 0M4.5 7.5a.5.5 0 0 1 0 1H3a2 2 0 0 0-2 2v1a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-1a2 2 0 0 0-2-2h-1.5a.5.5 0 0 1 0-1h1a.5.5 0 0 1 .5.5v1a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1v-1a.5.5 0 0 1 .5-.5z"
-                                                />
-                                            </svg>
-                                            {comment.likes}
-                                        </button>
-                                        <button
-                                            class="text-xs text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
-                                        >
-                                            Reply
-                                        </button>
-                                    </div>
-                                </div>
                             </div>
-                        {/each}
+                        {:else}
+                            <p class="text-sm text-white/50">
+                                No location data available for this video.
+                            </p>
+                        {/if}
                     </div>
-                </div></CollapsibleHeading
-            >
+                {/if}
+            </div>
+
+            <!-- Transcript Row -->
+            {#if data.video.transcript}
+                <div class="border-b border-white/10">
+                    <button
+                        onclick={() => (isTranscriptOpen = !isTranscriptOpen)}
+                        class="w-full py-3 flex items-center gap-3 hover:bg-white/5 transition-colors"
+                    >
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="16"
+                            height="16"
+                            fill="currentColor"
+                            viewBox="0 0 16 16"
+                            class="text-white/70"
+                        >
+                            <path
+                                d="M5 8.5a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1-.5-.5zm0-2a.5.5 0 0 1 .5-.5h5a.5.5 0 0 1 0 1h-5a.5.5 0 0 1-.5-.5zm0-2a.5.5 0 0 1 .5-.5h7a.5.5 0 0 1 0 1h-7a.5.5 0 0 1-.5-.5zm0-2a.5.5 0 0 1 .5-.5h9a.5.5 0 0 1 0 1h-9a.5.5 0 0 1-.5-.5z"
+                            />
+                            <path
+                                d="M2 2a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V2zm2-1a1 1 0 0 0-1 1v12a1 1 0 0 0 1 1h8a1 1 0 0 0 1-1V2a1 1 0 0 0-1-1H4z"
+                            />
+                        </svg>
+                        <span class="text-sm font-medium text-white/90">Transcript</span>
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="14"
+                            height="14"
+                            fill="currentColor"
+                            viewBox="0 0 16 16"
+                            class="text-white/70 ml-auto transition-transform {isTranscriptOpen
+                                ? 'rotate-45'
+                                : ''}"
+                        >
+                            <path d="M8 4a.5.5 0 0 1 .5.5v3h3a.5.5 0 0 1 0 1h-3v3a.5.5 0 0 1-1 0v-3h-3a.5.5 0 0 1 0-1h3v-3A.5.5 0 0 1 8 4z" />
+                        </svg>
+                    </button>
+                    {#if isTranscriptOpen}
+                            <div class="text-sm text-white/70 leading-relaxed whitespace-pre-wrap">
+                                {data.video.transcript}
+                            </div>
+                     
+                    {/if}
+                </div>
+            {/if}
         </div>
     </div>
 </div>

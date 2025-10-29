@@ -237,7 +237,7 @@
 <div class="h-screen overflow-x-hidden overflow-y-scroll bg-[#05060c] font-sans text-[12px] text-slate-200">
 	<div class="mx-auto w-full max-w-7xl space-y-12 px-6 py-12 lg:px-12">
 		<header
-			class="relative overflow-hidden"
+			class="relative overflow-hidden  bg-white/[0.04]"
 		>
 			<!-- <div class="pointer-events-none absolute -right-32 -top-32 h-72 w-72 rounded-full bg-sky-500/20 blur-3xl"></div>
 			<div class="pointer-events-none absolute -bottom-24 -left-24 h-56 w-56 rounded-full bg-purple-500/10 blur-2xl"></div> -->
@@ -263,10 +263,10 @@
 		<section class="grid gap-10 lg:grid-cols-2 lg:gap-0">
 			<article class="space-y-4 lg:pr-8">
 				<header class="flex items-center justify-between">
-					<h2 class="flex items-center gap-2 text-sm font-bold border-b w-full pb-2  text-slate-300">
+					<h2 class="flex items-center gap-3 text-sm font-bold border-b w-full pb-2  text-slate-300">
 			
 
-						<!-- <svg class="h-4 w-4 text-slate-200/90" fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"> <path d="M4 3H2v18h20V3H4zm16 2v14H4V5h16zm-6 4h-2v2h-2v2H8v2H6v2h2v-2h2v-2h2v-2h2v2h2v2h2v-2h-2v-2h-2V9zM8 7H6v2h2V7z" fill="currentColor"/> </svg>  -->
+						<svg class="h-4 w-3 text-slate-200/90" fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"> <path d="M4 3H2v18h20V3H4zm16 2v14H4V5h16zm-6 4h-2v2h-2v2H8v2H6v2h2v-2h2v-2h2v-2h2v2h2v2h2v-2h-2v-2h-2V9zM8 7H6v2h2V7z" fill="currentColor"/> </svg> 
 						Latest Videos
 					</h2>
 				</header>
@@ -315,7 +315,7 @@
 
 			<article class="space-y-4 lg:pl-8">
 				<header class="flex items-center justify-between">
-					<h2 class="flex items-center gap-2 text-sm font-bold border-b w-full pb-2  text-slate-300">
+					<h2 class="flex items-center gap-3 text-[11px] uppercase tracking-[0.35em] text-slate-300">
 						<!-- <svg
 							class="h-4 w-4 text-orange"
 							aria-hidden="true"

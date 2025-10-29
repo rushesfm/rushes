@@ -237,7 +237,7 @@
 <div class="h-screen overflow-x-hidden overflow-y-scroll bg-[#05060c] font-sans text-[12px] text-slate-200">
 	<div class="mx-auto w-full max-w-7xl space-y-12 px-6 py-12 lg:px-12">
 		<header
-			class="relative overflow-hidden"
+			class="relative overflow-hidden border border-white/10 bg-white/[0.04] px-6 py-8 shadow-[0_32px_120px_-45px_rgba(15,23,42,0.9)] sm:px-8 sm:py-10"
 		>
 			<!-- <div class="pointer-events-none absolute -right-32 -top-32 h-72 w-72 rounded-full bg-sky-500/20 blur-3xl"></div>
 			<div class="pointer-events-none absolute -bottom-24 -left-24 h-56 w-56 rounded-full bg-purple-500/10 blur-2xl"></div> -->
@@ -260,15 +260,10 @@
 			</div>
 		</header>
 
-		<section class="grid gap-10 lg:grid-cols-2 lg:gap-0">
+		<section class="grid gap-10 lg:grid-cols-2 lg:divide-x lg:divide-white/10 lg:gap-0">
 			<article class="space-y-4 lg:pr-8">
 				<header class="flex items-center justify-between">
-					<h2 class="flex items-center gap-2 text-sm font-bold border-b w-full pb-2  text-slate-300">
-			
-
-						<!-- <svg class="h-4 w-4 text-slate-200/90" fill="none" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"> <path d="M4 3H2v18h20V3H4zm16 2v14H4V5h16zm-6 4h-2v2h-2v2H8v2H6v2h2v-2h2v-2h2v-2h2v2h2v2h2v-2h-2v-2h-2V9zM8 7H6v2h2V7z" fill="currentColor"/> </svg>  -->
-						Latest Videos
-					</h2>
+					<h2 class="text-[11px] uppercase tracking-[0.35em] text-slate-400">Latest Videos</h2>
 				</header>
 
 				{#if latestVideos.length > 0}
@@ -291,7 +286,7 @@
 											{video.title}
 										</p>
 									</div>
-									<div class="flex flex-wrap items-center gap-x-1 gap-y-1 text-[11px] uppercase tracking-[0.25em] text-slate-400">
+									<div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-[11px] uppercase tracking-[0.25em] text-slate-400">
 										<span class="truncate text-slate-300/90 normal-case tracking-normal">{video.author}</span>
 										<span aria-hidden="true" class="text-slate-500">
 											•
@@ -315,59 +310,48 @@
 
 			<article class="space-y-4 lg:pl-8">
 				<header class="flex items-center justify-between">
-					<h2 class="flex items-center gap-2 text-sm font-bold border-b w-full pb-2  text-slate-300">
-						<!-- <svg
-							class="h-4 w-4 text-orange"
-							aria-hidden="true"
-							xmlns="http://www.w3.org/2000/svg"
-							viewBox="0 0 24 24"
-						>
-							<path
-								fill="currentColor"
-								d="M11 2h2v20h-2v-2H9v-2h2V6H9V4h2zM7 8V6h2v2zm0 8H3V8h4v2H5v4h2zm0 0v2h2v-2zm10-6h-2v4h2zm2-2h2v8h-2zm0 8v2h-4v-2zm0-10v2h-4V6z"
-							/>
-						</svg> -->
-						Latest Sounds
-					</h2>
+					<h2 class="text-[11px] uppercase tracking-[0.35em] text-slate-400">Latest Sounds</h2>
 				</header>
 
-				<div class="lg:-ml-8 lg:mt-2 lg:border-l lg:border-[rgba(255,255,255,0.08)] lg:pl-8">
-					<ul class="space-y-3">
-						{#each latestSounds as sound (sound.id)}
-							<li class="group flex items-center">
-								<div class="flex flex-1 flex-col gap-2 border-b border-white/10 pb-4">
-									<div class="flex items-center gap-3">
-										<button
-											type="button"
-											class="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:border-sky-400 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60"
-											aria-label={`Play ${sound.title}`}
-										>
-											<svg class="h-3 w-3" viewBox="0 0 12 14" fill="currentColor" aria-hidden="true">
-												<path d="M2 1.5v11l9-5.5-9-5.5z" />
-											</svg>
-										</button>
-										<div class="flex flex-col">
-											<p class="mb-1 truncate text-sm font-semibold text-white">
-												{sound.title}
-											</p>
-											<div class="flex flex-wrap items-center gap-x-1 gap-y-1 text-[11px] uppercase tracking-[0.25em] text-slate-400">
-												<span class="truncate text-slate-300/90 normal-case tracking-normal">{sound.author}</span>
-												<span aria-hidden="true" class="text-slate-500">
-													•
-												</span>
-												<span class="text-slate-400 normal-case tracking-normal">{sound.date}</span>
-												<span aria-hidden="true" class="text-slate-500">
-													•
-												</span>
-												<span class="truncate text-slate-400 normal-case tracking-normal">{sound.location}</span>
-											</div>
-										</div>
+				<ul class="space-y-3">
+					{#each latestSounds as sound (sound.id)}
+						<li
+							class="group flex items-center "
+						>
+						
+							<div class="flex flex-1 flex-col gap-2 border-b pb-4 border-white/10">
+								<div class="flex items-center gap-3">
+									<button
+										type="button"
+										class="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/5 text-slate-300 transition hover:border-sky-400 hover:text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-sky-500/60"
+										aria-label={`Play ${sound.title}`}
+									>
+										<svg class="h-3 w-3" viewBox="0 0 12 14" fill="currentColor" aria-hidden="true">
+											<path d="M2 1.5v11l9-5.5-9-5.5z" />
+										</svg>
+									</button>
+									<div class="flex flex-col">
+									<p class="truncate text-sm font-semibold mb-2 text-white">
+										{sound.title}
+									</p>
+									<div class="flex flex-wrap items-center gap-x-1 gap-y-1 text-[11px] uppercase tracking-[0.25em] text-slate-400">
+										<span class="truncate text-slate-300/90 normal-case tracking-normal">{sound.author}</span>
+										<span aria-hidden="true" class="text-slate-500">
+											•
+										</span>
+										<span class="text-slate-400 normal-case tracking-normal">{sound.date}</span>
+										<span aria-hidden="true" class="text-slate-500">
+											•
+										</span>
+										<span class="truncate text-slate-400 normal-case tracking-normal">{sound.location}</span>
 									</div>
 								</div>
-							</li>
-						{/each}
-					</ul>
-				</div>
+								</div>
+								
+							</div>
+						</li>
+					{/each}
+				</ul>
 			</article>
 		</section>
 	</div>

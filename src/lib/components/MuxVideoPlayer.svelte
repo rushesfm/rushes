@@ -6,6 +6,7 @@
     import { selectedVideo } from "$lib/stores/selectedVideo";
     import { getPlayerState } from "$lib/stores/playerStore.svelte";
     import { videosStore } from "$lib/stores/library";
+    import VideoTimeline from "./VideoTimeline.svelte";
 
     const {
         src = "",
@@ -201,75 +202,8 @@
             ? 'opacity-100'
             : ''}"
     >
-        <div
-            class="absolute bottom-4 left-0 right-0 flex items-center justify-center gap-3 pointer-events-auto"
-        >
-            <!-- Previous button -->
-            <button
-                on:click={goPrevious}
-                aria-label="Previous video"
-                class="control-button"
-            >
-                <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                >
-                    <path d="M15 18 9 12l6-6v12zm-6 0H7V6h2v12z" />
-                </svg>
-            </button>
-
-            <!-- Play/Pause button -->
-            <button
-                on:click={togglePlay}
-                aria-label={isPaused ? "Play" : "Pause"}
-                class="control-button-large"
-            >
-                {#if isPaused}
-                    <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="32"
-                        height="32"
-                        viewBox="0 0 24 24"
-                        fill="currentColor"
-                    >
-                        <path d="M8 5v14l11-7z" />
-                    </svg>
-                {:else}
-                    <svg
-                        xmlns="http://www.w3.org/2000/svg"
-                        width="32"
-                        height="32"
-                        viewBox="0 0 24 24"
-                        fill="currentColor"
-                    >
-                        <path d="M6 4h4v16H6zm8 0h4v16h-4z" />
-                    </svg>
-                {/if}
-            </button>
-
-            <!-- Next button -->
-            <button
-                on:click={goNext}
-                aria-label="Next video"
-                class="control-button"
-            >
-                <svg
-                    xmlns="http://www.w3.org/2000/svg"
-                    width="20"
-                    height="20"
-                    viewBox="0 0 24 24"
-                    fill="currentColor"
-                >
-                    <path d="m9 18 6-6-6-6v12zm6 0h2V6h-2v12z" />
-                </svg>
-            </button>
-        </div>
-
         <!-- Fullscreen button in top-right corner -->
-        <div class="absolute top-4 right-4 pointer-events-auto">
+        <div class="absolute top-4 right-4 pointer-events-auto z-10">
             <button
                 on:click={toggleFullscreen}
                 aria-label={isExpanded ? "Shrink player" : "Expand player"}
@@ -302,6 +236,82 @@
                     </svg>
                 {/if}
             </button>
+        </div>
+
+        <!-- Bottom controls area with timeline and playback controls -->
+        <div class="absolute bottom-0 left-0 right-0 pointer-events-auto">
+            <!-- Timeline overlay at the bottom -->
+            <div class="video-timeline-overlay px-6 pb-6">
+                <VideoTimeline />
+            </div>
+
+            <!-- Playback controls centered above timeline -->
+            <div
+                class="flex hidden items-center justify-center gap-4 pb-4 px-6"
+            >
+                <!-- Previous button -->
+                <button
+                    on:click={goPrevious}
+                    aria-label="Previous video"
+                    class="control-button"
+                >
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                    >
+                        <path d="M15 18 9 12l6-6v12zm-6 0H7V6h2v12z" />
+                    </svg>
+                </button>
+
+                <!-- Play/Pause button -->
+                <button
+                    on:click={togglePlay}
+                    aria-label={isPaused ? "Play" : "Pause"}
+                    class="control-button-large"
+                >
+                    {#if isPaused}
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="32"
+                            height="32"
+                            viewBox="0 0 24 24"
+                            fill="currentColor"
+                        >
+                            <path d="M8 5v14l11-7z" />
+                        </svg>
+                    {:else}
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="32"
+                            height="32"
+                            viewBox="0 0 24 24"
+                            fill="currentColor"
+                        >
+                            <path d="M6 4h4v16H6zm8 0h4v16h-4z" />
+                        </svg>
+                    {/if}
+                </button>
+
+                <!-- Next button -->
+                <button
+                    on:click={goNext}
+                    aria-label="Next video"
+                    class="control-button"
+                >
+                    <svg
+                        xmlns="http://www.w3.org/2000/svg"
+                        width="20"
+                        height="20"
+                        viewBox="0 0 24 24"
+                        fill="currentColor"
+                    >
+                        <path d="m9 18 6-6-6-6v12zm6 0h2V6h-2v12z" />
+                    </svg>
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -360,6 +370,23 @@
         background: rgba(233, 149, 12, 0.9);
         border-color: rgba(233, 149, 12, 1);
         transform: scale(1.1);
+    }
+
+    .video-timeline-overlay {
+        background: linear-gradient(to top, rgba(0, 0, 0, 0.8) 0%, rgba(0, 0, 0, 0.5) 60%, transparent 100%);
+        padding-top: 1rem;
+    }
+
+    /* Override VideoTimeline padding when used in overlay */
+    .video-timeline-overlay :global(.px-8) {
+        padding-left: 0;
+        padding-right: 0;
+    }
+
+    /* Make timeline text readable on dark overlay */
+    .video-timeline-overlay :global(.text-gray-700),
+    .video-timeline-overlay :global(.text-gray-200) {
+        color: rgba(255, 255, 255, 0.9) !important;
     }
     :global(media-controller) {
         --media-primary-color: lightpink;

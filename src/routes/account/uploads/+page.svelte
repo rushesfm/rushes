@@ -1,6 +1,7 @@
 <script lang="ts">
   import type { PageData } from './$types';
   import { getContext, onDestroy } from 'svelte';
+  import Breadcrumbs from '$lib/components/Breadcrumbs.svelte';
   import type { BreadcrumbItem } from '$lib/types/navigation';
 
   export let data: PageData;
@@ -25,10 +26,14 @@
     { href: '/account/uploads', label: 'My Uploads' }
   ];
 
-  const breadcrumbsContext = getContext<{ set: (items: BreadcrumbItem[]) => void; clear: () => void }>('breadcrumbs');
+  const breadcrumbsContext = getContext<{
+    set: (items: BreadcrumbItem[]) => void;
+    setInline: (items: BreadcrumbItem[]) => void;
+    clear: () => void;
+  }>('breadcrumbs');
 
   if (breadcrumbsContext) {
-    breadcrumbsContext.set(customBreadcrumbs);
+    breadcrumbsContext.setInline(customBreadcrumbs);
   }
 
   onDestroy(() => {
@@ -38,6 +43,7 @@
 
 <div class="min-h-screen p-8 bg-black/80">
   <div class="mx-auto w-full max-w-6xl">
+    <Breadcrumbs items={customBreadcrumbs} />
     <header class="mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
       <h1 class="text-3xl font-bold text-white">Your Uploads</h1>
       <a href="/account" class="text-sm rounded px-3 py-2 border border-white/10 text-white/70 hover:bg-white/10 transition">← Back to Account</a>

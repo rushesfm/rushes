@@ -1,13 +1,13 @@
 <script lang="ts">
-	import type { ActionData, PageData } from './$types';
-	import { onMount } from 'svelte';
-	import { goto } from '$app/navigation';
-	import VideoPlayer from '$lib/components/VideoPlayer.svelte';
+import type { ActionData, PageData } from './$types';
+import { onMount } from 'svelte';
+import { goto } from '$app/navigation';
+import VideoPlayer from '$lib/components/VideoPlayer.svelte';
 
 	export let data: PageData;
 	export let form: ActionData;
 
-	let activeTab: 'login' | 'signup' = 'login';
+let activeTab: 'login' | 'signup' = 'login';
 
 	type LoginFormState =
 		| undefined
@@ -82,12 +82,12 @@
 		if (file) queueUpload(file);
 	}
 
-	function queueUpload(file: File) {
+function queueUpload(file: File) {
 		(window as any).__rushesUploadFile = file;
 		goto('/account/upload');
 	}
 
-	function formatDateTime(value?: string | Date | null) {
+function formatDateTime(value?: string | Date | null) {
 		if (!value) return '';
 		try {
 			const date = value instanceof Date ? value : new Date(value);

@@ -14,7 +14,6 @@
     import VideoTimeline from "$lib/components/VideoTimeline.svelte";
     import VideoInfo from "$lib/components/VideoInfo.svelte";
     import QueueBanner from "$lib/components/QueueBanner.svelte";
-    import Breadcrumbs from "$lib/components/Breadcrumbs.svelte";
     import type { LayoutData } from "./$types";
     import type { Video } from "$lib/types/content";
     import {
@@ -23,8 +22,6 @@
         getVideoById as lookupVideo,
     } from "$lib/stores/library";
     import { uiState, actions } from "$lib/stores/appStore";
-    import { setContext } from "svelte";
-    import type { BreadcrumbItem } from "$lib/types/navigation";
 
     let { children, data } = $props<{
         children: () => any;
@@ -225,20 +222,6 @@
         $selectedVideo.queueContext ? 0 : liveStartTime
     );
 
-    let breadcrumbOverride = $state<BreadcrumbItem[] | null>(null);
-
-    const breadcrumbController = {
-        set(items: BreadcrumbItem[]) {
-            breadcrumbOverride = items;
-        },
-        clear() {
-            breadcrumbOverride = null;
-        }
-    };
-
-    setContext("breadcrumbs", breadcrumbController);
-
-    const layoutBreadcrumbs = $derived(() => breadcrumbOverride ?? undefined);
 </script>
 
 <svelte:head>
@@ -311,7 +294,6 @@
                 style="height: 100vh; overflow-y: scroll;"
                 style:view-transition-name="main-content"
             >
-                <Breadcrumbs items={layoutBreadcrumbs} />
                 {@render children()}
             </main>
         </div>

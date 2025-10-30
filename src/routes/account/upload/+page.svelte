@@ -4,9 +4,8 @@
     import type { PageData, ActionData } from "./$types";
     import LocationPicker from "$lib/components/LocationPicker.svelte";
     import { goto } from "$app/navigation";
-    import { getContext, onDestroy } from "svelte";
+    import { onDestroy } from "svelte";
     import { Upload } from "tus-js-client";
-    import type { BreadcrumbItem } from "$lib/types/navigation";
 
     interface Props {
         data: PageData;
@@ -461,23 +460,6 @@
             URL.revokeObjectURL(videoPreviewUrl);
         }
         resetTusUpload({ terminate: true, clearVideoUrl: false }).catch(() => {});
-    });
-
-    const customBreadcrumbs: BreadcrumbItem[] = [
-        { href: "/", label: "Home" },
-        { href: "/account", label: "My Account" },
-        { href: "/account/upload", label: "Upload" }
-    ];
-
-    const breadcrumbsContext = getContext<{ set: (items: BreadcrumbItem[]) => void; clear: () => void }>(
-        "breadcrumbs"
-    );
-
-    $effect(() => {
-        if (breadcrumbsContext) {
-            breadcrumbsContext.set(customBreadcrumbs);
-            return () => breadcrumbsContext.clear();
-        }
     });
 </script>
 

@@ -285,12 +285,12 @@
         use:enhance={handleSubmit}
     >
         <header>
-            <h1>Edit Video</h1>
+            <h1> {title}</h1>
             <p>Update your video details below.</p>
         </header>
 
         <!-- Video Player -->
-        {#if videoUrl}
+        <!-- {#if videoUrl}
             <div class="form-group">
                 <label class="label">Video Preview</label>
                 <video id="video-player" class="video-preview" controls>
@@ -299,7 +299,7 @@
                     Your browser does not support the video tag.
                 </video>
             </div>
-        {/if}
+        {/if} -->
 
         {#if form?.error}
             <div class="error-banner">
@@ -376,7 +376,7 @@
         </div>
 
         <!-- Thumbnail Picker -->
-        <div class="form-group">
+        <!-- <div class="form-group">
             <label class="label">Thumbnail</label>
 
             {#if thumbnailError}
@@ -512,7 +512,7 @@
                     {thumbnails.length > 0 ? 'Regenerate Thumbnails' : 'Generate Thumbnails'}
                 </button>
             {/if}
-        </div>
+        </div> -->
 
         <!-- Location Picker -->
         <div class="form-group">
@@ -561,11 +561,8 @@
 
     .card {
         width: 100%;
-        background: rgba(15, 23, 42, 0.9);
-        border: 1px solid rgba(148, 163, 184, 0.2);
-        border-radius: 20px;
+        background: rgba(9, 9, 9, 0.9);
         padding: 2.5rem;
-        box-shadow: 0 40px 120px -60px rgba(15, 118, 226, 0.45);
         display: grid;
         gap: 2rem;
         color: #e2e8f0;

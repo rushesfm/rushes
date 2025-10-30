@@ -4,75 +4,109 @@ import { getDb } from '$lib/server/db';
 import { getVideoById, updateVideo } from '$lib/server/db/videos';
 import { ensureUserForAuth } from '$lib/server/db/users';
 import { error, fail } from '@sveltejs/kit';
+import { videos } from '$lib/server/db/schema';
+import { eq } from 'drizzle-orm';
 
 export const load: PageServerLoad = async (event) => {
-  const { params, platform } = event;
-  const videoId = params.slug; // using ID in the route param
+  try {
+    const { params, platform } = event;
+    const videoId = params.slug; // using ID in the route param
 
-  const supabase = createSupabaseServerClient(event);
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) {
-    throw error(401, 'Not authenticated');
-  }
+    console.log('[Edit Page Load] Video ID:', videoId);
 
-  const databaseUrl = platform?.env?.DATABASE_URL ?? process.env.DATABASE_URL;
-  if (!databaseUrl) {
-    throw error(500, 'Database not configured');
-  }
+    const supabase = createSupabaseServerClient(event);
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
 
-  const db = getDb(databaseUrl);
-  const appUser = await ensureUserForAuth(db, user);
-
-  const video = await getVideoById(db, videoId);
-  if (!video) {
-    throw error(404, 'Video not found');
-  }
-
-  // Flexible ownership check: compare against several possible identifiers
-  const identifiers = new Set<string>([
-    String(appUser.id),
-    String(appUser.slug ?? ''),
-    String(appUser.authId ?? ''),
-    String(user.id)
-  ]);
-  const candidateFields = [
-    video.userId,
-    (video as any).authorId,
-    (video as any).uploaderId,
-    (video as any).ownerId,
-    (video as any).userSlug,
-    (video as any).authorSlug
-  ];
-  const ownsVideo = candidateFields.some((v) => v != null && identifiers.has(String(v)));
-
-  if (!ownsVideo) {
-    throw error(403, 'You do not have permission to edit this video');
-  }
-
-  // Extract latitude and longitude from locations array if available
-  let latitude: number | undefined = undefined;
-  let longitude: number | undefined = undefined;
-
-  if (video.locations && video.locations.length > 0) {
-    const location = video.locations[0];
-    latitude = location.latitude;
-    longitude = location.longitude;
-  }
-
-  // Return only what the editor needs
-  return {
-    data: {
-      id: video.id,
-      title: video.title ?? '',
-      description: video.description ?? '',
-      tags: Array.isArray(video.keywords) ? video.keywords : [],
-      latitude,
-      longitude,
-      videoUrl: video.videoUrl ?? video.url ?? '',
-      thumbnailUrl: video.thumbnailUrl ?? '',
-      duration: video.duration ?? 0
+    if (authError) {
+      console.error('[Edit Page Load] Auth error:', authError);
+      throw error(401, 'Authentication error: ' + authError.message);
     }
-  };
+
+    if (!user) {
+      console.error('[Edit Page Load] No user found');
+      throw error(401, 'Not authenticated');
+    }
+
+    console.log('[Edit Page Load] User authenticated:', user.id);
+
+    const databaseUrl = platform?.env?.DATABASE_URL ?? process.env.DATABASE_URL;
+    if (!databaseUrl) {
+      console.error('[Edit Page Load] Database URL not configured');
+      throw error(500, 'Database not configured');
+    }
+
+    const db = getDb(databaseUrl);
+
+    try {
+      const appUser = await ensureUserForAuth(db, user);
+      console.log('[Edit Page Load] App user:', appUser.id, appUser.slug);
+
+      // Get the raw video data directly from database to check ownership
+      const rawVideoRows = await db
+        .select()
+        .from(videos)
+        .where(eq(videos.id, videoId))
+        .limit(1)
+        .execute();
+
+      if (!rawVideoRows.length) {
+        console.error('[Edit Page Load] Video not found:', videoId);
+        throw error(404, 'Video not found');
+      }
+
+      const rawVideo = rawVideoRows[0];
+      console.log('[Edit Page Load] Video found:', rawVideo.id, 'userId:', rawVideo.userId);
+
+      // Check if user owns this video
+      if (rawVideo.userId !== appUser.id) {
+        console.error('[Edit Page Load] User does not own video. Video userId:', rawVideo.userId, 'App user id:', appUser.id);
+        throw error(403, 'You do not have permission to edit this video');
+      }
+
+      console.log('[Edit Page Load] Ownership verified');
+
+      // Now get the full video object with all the mapped data
+      const video = await getVideoById(db, videoId);
+      if (!video) {
+        throw error(500, 'Failed to load video data');
+      }
+
+      // Extract latitude and longitude from locations array if available
+      let latitude: number | undefined = undefined;
+      let longitude: number | undefined = undefined;
+
+      if (video.locations && video.locations.length > 0) {
+        const location = video.locations[0];
+        latitude = location.latitude;
+        longitude = location.longitude;
+      }
+
+      // Return only what the editor needs
+      return {
+        data: {
+          id: video.id,
+          title: video.title ?? '',
+          description: video.description ?? '',
+          tags: Array.isArray(video.keywords) ? video.keywords : [],
+          latitude,
+          longitude,
+          videoUrl: video.videoUrl ?? video.url ?? '',
+          thumbnailUrl: video.thumbnailUrl ?? '',
+          duration: video.duration ?? 0
+        }
+      };
+    } catch (dbError) {
+      console.error('[Edit Page Load] Database error:', dbError);
+      throw error(500, 'Database error: ' + (dbError instanceof Error ? dbError.message : 'Unknown error'));
+    }
+  } catch (err) {
+    console.error('[Edit Page Load] Unexpected error:', err);
+    // Re-throw if it's already a SvelteKit error
+    if (err && typeof err === 'object' && 'status' in err) {
+      throw err;
+    }
+    throw error(500, 'Internal server error: ' + (err instanceof Error ? err.message : 'Unknown error'));
+  }
 };
 
 export const actions: Actions = {
@@ -95,29 +129,20 @@ export const actions: Actions = {
     const db = getDb(databaseUrl);
     const appUser = await ensureUserForAuth(db, user);
 
-    // Verify ownership
-    const video = await getVideoById(db, videoId);
-    if (!video) {
+    // Verify ownership - check raw video data
+    const rawVideoRows = await db
+      .select()
+      .from(videos)
+      .where(eq(videos.id, videoId))
+      .limit(1)
+      .execute();
+
+    if (!rawVideoRows.length) {
       return fail(404, { error: 'Video not found' });
     }
 
-    const identifiers = new Set<string>([
-      String(appUser.id),
-      String(appUser.slug ?? ''),
-      String(appUser.authId ?? ''),
-      String(user.id)
-    ]);
-    const candidateFields = [
-      video.userId,
-      (video as any).authorId,
-      (video as any).uploaderId,
-      (video as any).ownerId,
-      (video as any).userSlug,
-      (video as any).authorSlug
-    ];
-    const ownsVideo = candidateFields.some((v) => v != null && identifiers.has(String(v)));
-
-    if (!ownsVideo) {
+    const rawVideo = rawVideoRows[0];
+    if (rawVideo.userId !== appUser.id) {
       return fail(403, { error: 'You do not have permission to edit this video' });
     }
 

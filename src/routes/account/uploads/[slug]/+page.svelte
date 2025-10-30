@@ -223,6 +223,32 @@
         updateWordCount();
     });
 
+    // Initialize HLS video player
+    $effect(() => {
+        if (browser && videoUrl) {
+            const videoElement = document.getElementById('video-player') as HTMLVideoElement;
+            if (!videoElement) return;
+
+            const isHLS = videoUrl.includes('.m3u8');
+
+            if (isHLS && typeof (window as any).Hls !== 'undefined') {
+                const Hls = (window as any).Hls;
+                if (Hls.isSupported()) {
+                    const hls = new Hls();
+                    hls.loadSource(videoUrl);
+                    hls.attachMedia(videoElement);
+
+                    return () => {
+                        hls.destroy();
+                    };
+                }
+            } else if (isHLS && videoElement.canPlayType('application/vnd.apple.mpegurl')) {
+                // Native HLS support (Safari)
+                videoElement.src = videoUrl;
+            }
+        }
+    });
+
     function handleSubmit() {
         isSubmitting = true;
         return async ({ result, update }: any) => {
@@ -262,6 +288,18 @@
             <h1>Edit Video</h1>
             <p>Update your video details below.</p>
         </header>
+
+        <!-- Video Player -->
+        {#if videoUrl}
+            <div class="form-group">
+                <label class="label">Video Preview</label>
+                <video id="video-player" class="video-preview" controls>
+                    <source src={videoUrl} type="application/x-mpegURL" />
+                    <track kind="captions" label="No captions" />
+                    Your browser does not support the video tag.
+                </video>
+            </div>
+        {/if}
 
         {#if form?.error}
             <div class="error-banner">

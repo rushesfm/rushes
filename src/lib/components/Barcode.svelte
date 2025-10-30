@@ -1,17 +1,18 @@
-<script>
-    let videoElement;
-    let barcodeCanvas;
+<script lang="ts">
+    let videoElement: HTMLVideoElement | null = null;
+    let barcodeCanvas: HTMLCanvasElement | null = null;
 
     let isProcessing = false;
     let progress = 0;
-    let barcodeDataUrl = null; // This will hold the final image data
+    let barcodeDataUrl: string | null = null; // This will hold the final image data
 
     // These dimensions control the final barcode image
     const BARCODE_WIDTH = 1200; // The number of "slices" to take
     const BARCODE_HEIGHT = 200; // The height of the final image
 
-    async function handleFileSelect(event) {
-        const file = event.target.files[0];
+    async function handleFileSelect(event: Event) {
+        const input = event.currentTarget as HTMLInputElement | null;
+        const file = input?.files?.[0];
         if (!file) return;
 
         isProcessing = true;
@@ -19,13 +20,15 @@
         barcodeDataUrl = null;
 
         // Clean up any previous object URL
-        if (videoElement.src) {
+        if (videoElement?.src) {
             URL.revokeObjectURL(videoElement.src);
         }
 
         // Load the video file into the hidden <video> element
         const fileURL = URL.createObjectURL(file);
-        videoElement.src = fileURL;
+        if (videoElement) {
+            videoElement.src = fileURL;
+        }
 
         // The 'loadedmetadata' event will fire, triggering generateBarcode()
     }
@@ -34,13 +37,15 @@
      * Helper function to wait for the video to seek to a new time.
      * We wrap this in a Promise to use it with async/await.
      */
-    function seekVideo(time) {
+    function seekVideo(time: number) {
+        const element = videoElement;
+        if (!element) return Promise.reject(new Error('Video element not ready'));
         return new Promise((resolve, reject) => {
             // Set up event listeners *before* changing currentTime
-            videoElement.onseeked = () => resolve(true);
-            videoElement.onerror = (e) => reject(e);
+            element.onseeked = () => resolve(true);
+            element.onerror = (e) => reject(e);
 
-            videoElement.currentTime = time;
+            element.currentTime = time;
         });
     }
 
@@ -48,22 +53,35 @@
      * This function runs once the video's duration and dimensions are known.
      */
     async function generateBarcode() {
+        const element = videoElement;
+        const canvas = barcodeCanvas;
+        if (!element || !canvas) return;
         console.log("Video metadata loaded. Starting barcode generation...");
 
-        const duration = videoElement.duration;
-        const videoWidth = videoElement.videoWidth;
-        const videoHeight = videoElement.videoHeight;
+        const duration = element.duration;
+        const videoWidth = element.videoWidth;
+        const videoHeight = element.videoHeight;
 
         // 1. Set up the final canvas
-        barcodeCanvas.width = BARCODE_WIDTH;
-        barcodeCanvas.height = BARCODE_HEIGHT;
-        const ctx = barcodeCanvas.getContext("2d");
+        canvas.width = BARCODE_WIDTH;
+        canvas.height = BARCODE_HEIGHT;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+            console.error('Unable to get barcode canvas context');
+            isProcessing = false;
+            return;
+        }
 
         // 2. Create a hidden, in-memory canvas to draw full frames
         const tempCanvas = document.createElement("canvas");
         tempCanvas.width = videoWidth;
         tempCanvas.height = videoHeight;
         const tempCtx = tempCanvas.getContext("2d");
+        if (!tempCtx) {
+            console.error('Unable to get temp canvas context');
+            isProcessing = false;
+            return;
+        }
 
         const interval = duration / BARCODE_WIDTH;
 
@@ -75,7 +93,7 @@
                 await seekVideo(time);
 
                 // Draw the full video frame onto the temporary canvas
-                tempCtx.drawImage(videoElement, 0, 0, videoWidth, videoHeight);
+                tempCtx.drawImage(element, 0, 0, videoWidth, videoHeight);
 
                 // Draw a 1px slice from the *center* of the temp canvas
                 // onto the final barcode canvas.
@@ -104,11 +122,13 @@
         console.log("Barcode generation complete.");
         isProcessing = false;
         progress = 100;
-        barcodeDataUrl = barcodeCanvas.toDataURL("image/png");
+        barcodeDataUrl = canvas.toDataURL("image/png");
 
         // Clean up the object URL to free memory
-        URL.revokeObjectURL(videoElement.src);
-        videoElement.src = "";
+        if (element.src) {
+            URL.revokeObjectURL(element.src);
+            element.src = "";
+        }
     }
 </script>
 

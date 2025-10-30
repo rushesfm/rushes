@@ -8,7 +8,8 @@
 		"enabled": true
 	},
 	"vars": {
-		"PUBLIC_SUPABASE_URL": "https://jmpxnpndvgbbtmvfribf.supabase.co"
+		"PUBLIC_SUPABASE_URL": "https://jmpxnpndvgbbtmvfribf.supabase.co",
+		"PUBLIC_SUPABASE_ANON_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImptcHhucG5kdmdiYnRtdmZyaWJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk3NTgyMzksImV4cCI6MjA3NTMzNDIzOX0.YFxW3EzucGfo9QSlH0Pcq44hjpXVHH3MDnCYUQj4Im0"
 	},
 	"hyperdrive": [
 		{

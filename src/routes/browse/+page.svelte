@@ -81,13 +81,6 @@
     });
 
     // ===== DATE LOGIC =====
-    interface DateEntry {
-        year: number;
-        month: number;
-        day: number;
-        dateStr: string; // YYYY-MM-DD format
-    }
-
     // Extract all unique dates from videos
     const allDates = $derived.by(() => {
         const dateSet = new Set<string>();
@@ -110,6 +103,11 @@
             }
         });
         return Array.from(dateSet).sort().reverse(); // Most recent first
+    });
+
+    // Set of dates that have videos (for quick lookup)
+    const datesWithVideos = $derived.by(() => {
+        return new Set(allDates);
     });
 
     // Group dates by year > month > day
@@ -141,23 +139,44 @@
             .sort((a, b) => b - a); // Most recent first
     });
 
-    // Get sorted months for a year
-    function getMonthsForYear(year: number): number[] {
-        const yearData = datesByYear[year];
-        if (!yearData) return [];
-        return Object.keys(yearData)
-            .map(Number)
-            .sort((a, b) => b - a); // Most recent first
+    // Current year being viewed (initialize to current year, will be set properly when years are available)
+    let currentYear = $state<number>(new Date().getFullYear());
+    
+    // Update currentYear to the most recent year with videos when available
+    $effect(() => {
+        if (years.length > 0 && !years.includes(currentYear)) {
+            currentYear = years[0];
+        }
+    });
+
+    // Check if a date has videos
+    function hasVideos(year: number, month: number, day: number): boolean {
+        const dateStr = getDateStr(year, month, day);
+        return datesWithVideos.has(dateStr);
     }
 
-    // Get sorted days for a year/month
-    function getDaysForMonth(year: number, month: number): number[] {
-        const yearData = datesByYear[year];
-        if (!yearData || !yearData[month]) return [];
-        return Object.keys(yearData[month])
-            .map(Number)
-            .sort((a, b) => b - a); // Most recent first
+    // Get calendar days for a month (returns array of day numbers, with null for days outside the month)
+    function getCalendarDays(year: number, month: number): (number | null)[] {
+        const firstDay = new Date(year, month - 1, 1);
+        const lastDay = new Date(year, month, 0);
+        const daysInMonth = lastDay.getDate();
+        const startingDayOfWeek = firstDay.getDay(); // 0 = Sunday, 1 = Monday, etc.
+
+        const days: (number | null)[] = [];
+
+        // Add empty cells for days before the first day of the month
+        for (let i = 0; i < startingDayOfWeek; i++) {
+            days.push(null);
+        }
+
+        // Add all days of the month
+        for (let day = 1; day <= daysInMonth; day++) {
+            days.push(day);
+        }
+
+        return days;
     }
+
 
     // Get date string for year/month/day
     function getDateStr(year: number, month: number, day: number): string {
@@ -165,8 +184,10 @@
     }
 
     // Format date for display
-    function formatDay(day: number): string {
-        return String(day);
+    function formatDate(year: number, month: number, day: number): string {
+        const dayStr = String(day).padStart(2, "0");
+        const monthStr = String(month).padStart(2, "0");
+        return `${dayStr}/${monthStr}/${year}`;
     }
 
     function formatMonth(month: number): string {
@@ -187,25 +208,17 @@
         return monthNames[month - 1] || String(month);
     }
 
-    // Calculate number of columns for date view based on years
-    const dateColumns = $derived.by(() => {
-        const yearCount = years.length;
-        if (yearCount <= 2) return 1;
-        if (yearCount <= 4) return 2;
-        if (yearCount <= 6) return 3;
-        return 4;
+    // Get months that have videos for the current year
+    const monthsWithVideos = $derived.by(() => {
+        const year = currentYear;
+        const yearData = datesByYear[year];
+        if (!yearData) return [];
+        
+        return Object.keys(yearData)
+            .map(Number)
+            .sort((a, b) => a - b); // Sort chronologically
     });
 
-    // Distribute years across columns
-    const yearsByColumn = $derived.by(() => {
-        const cols = dateColumns;
-        const yearList = years;
-        const result: number[][] = Array.from({ length: cols }, () => []);
-        yearList.forEach((year: number, index: number) => {
-            result[index % cols].push(year);
-        });
-        return result;
-    });
 
     // ===== USERS LOGIC =====
     // Get all users sorted alphabetically
@@ -434,70 +447,122 @@
                 </div>
             {/if}
         {:else if activeTab === "date"}
-            <!-- Date View -->
-            {#if allDates.length > 0}
-                <div
-                    class="grid gap-8 mt-8"
-                    style="grid-template-columns: repeat({dateColumns}, 1fr);"
-                >
-                    {#each yearsByColumn as columnYears}
-                        <div class="space-y-8">
-                            {#each columnYears as year}
-                                {@const yearData = datesByYear[year]}
-                                <section>
-                                    <!-- Year Header -->
-                                    <h2 class="text-2xl font-semibold text-white/90 mb-4 pb-2 border-b border-white/10">
-                                        <a
-                                            href="/date/{year}"
-                                            class="hover:text-white transition-colors"
-                                        >
-                                            {year}
-                                        </a>
-                                    </h2>
+            <!-- Calendar View -->
+            <div class="mt-8">
+                <!-- Year Navigation Header -->
+                <div class="flex items-center gap-3 mb-6 pb-2 border-b border-white/10">
+                    <button
+                        onclick={() => currentYear--}
+                        class="p-1 hover:bg-white/10 transition-colors rounded"
+                        aria-label="Previous year"
+                    >
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="16"
+                            height="16"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                            class="text-white/70 hover:text-white"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M15 19l-7-7 7-7"
+                            />
+                        </svg>
+                    </button>
+                    <h2 class="text-xl font-semibold text-white/90">
+                        {currentYear}
+                    </h2>
+                    <button
+                        onclick={() => currentYear++}
+                        class="p-1 hover:bg-white/10 transition-colors rounded"
+                        aria-label="Next year"
+                    >
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="16"
+                            height="16"
+                            fill="none"
+                            stroke="currentColor"
+                            viewBox="0 0 24 24"
+                            class="text-white/70 hover:text-white"
+                        >
+                            <path
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="2"
+                                d="M9 5l7 7-7 7"
+                            />
+                        </svg>
+                    </button>
+                </div>
 
-                                    <div class="space-y-6">
-                                        {#each getMonthsForYear(year) as month}
-                                            {@const monthData = yearData[month]}
-                                            {@const monthSlug = `${year}-${String(month).padStart(2, "0")}`}
-                                            <!-- Month Section -->
-                                            <div class="ml-4">
-                                                <h3 class="text-lg font-medium text-white/80 mb-2">
-                                                    <a
-                                                        href="/date/{monthSlug}"
-                                                        class="hover:text-white transition-colors"
-                                                    >
-                                                        {formatMonth(month)}
-                                                    </a>
-                                                </h3>
-
-                                                <ul class="space-y-1">
-                                                    {#each getDaysForMonth(year, month) as day}
-                                                        {@const dateStr = getDateStr(year, month, day)}
-                                                        <li>
-                                                            <a
-                                                                href="/date/{dateStr}"
-                                                                class="block py-1.5 px-2 text-sm text-white/70 hover:text-white hover:bg-white/5 rounded transition-colors"
-                                                            >
-                                                                {formatDay(day)}
-                                                            </a>
-                                                        </li>
-                                                    {/each}
-                                                </ul>
-                                            </div>
-                                        {/each}
+                <!-- Calendar Grid -->
+                {#if monthsWithVideos.length > 0}
+                    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+                        {#each monthsWithVideos as month}
+                            {@const monthName = formatMonth(month)}
+                            {@const calendarDays = getCalendarDays(currentYear, month)}
+                            {@const monthSlug = `${currentYear}-${String(month).padStart(2, "0")}`}
+                            {@const monthIndex = monthsWithVideos.indexOf(month)}
+                            {@const totalMonths = monthsWithVideos.length}
+                            {@const isLastItem = monthIndex === totalMonths - 1}
+                            {@const showBorderMd = !isLastItem && (monthIndex + 1) % 2 !== 0}
+                            {@const showBorderLg = !isLastItem && (monthIndex + 1) % 3 !== 0}
+                            {@const showBorderXl = !isLastItem && (monthIndex + 1) % 4 !== 0}
+                            <div class="p-4 {showBorderMd ? 'md:border-r' : ''} {showBorderLg ? 'lg:border-r' : ''} {showBorderXl ? 'xl:border-r' : ''} border-white/10">
+                            <h3 class="text-lg font-semibold text-white/90 mb-3 pb-2 border-b border-white/10">
+                                <a
+                                    href="/date/{monthSlug}"
+                                    class="hover:text-white transition-colors"
+                                >
+                                    {monthName}
+                                </a>
+                            </h3>
+                            
+                            <!-- Calendar Header (Day names) -->
+                            <div class="grid grid-cols-7 gap-1 mb-2">
+                                {#each ["S", "M", "T", "W", "T", "F", "S"] as dayName}
+                                    <div class="text-xs text-center text-white/50 font-medium py-1">
+                                        {dayName}
                                     </div>
-                                </section>
-                            {/each}
+                                {/each}
+                            </div>
+
+                            <!-- Calendar Days Grid -->
+                            <div class="grid grid-cols-7 gap-1">
+                                {#each calendarDays as day}
+                                    {#if day === null}
+                                        <div class="aspect-square"></div>
+                                    {:else}
+                                        {@const dateStr = getDateStr(currentYear, month, day)}
+                                        {@const hasVideo = hasVideos(currentYear, month, day)}
+                                        <a
+                                            href="/date/{dateStr}"
+                                            class="aspect-square flex items-center justify-center text-sm transition-colors {hasVideo
+                                                ? "bg-orange-500/20 text-orange-400 border border-orange-500/40 hover:bg-orange-500/30"
+                                                : "text-white/40 hover:text-white/60 hover:bg-white/5"} "
+                                            title={hasVideo ? `Videos available on ${formatDate(currentYear, month, day)}` : formatDate(currentYear, month, day)}
+                                        >
+                                            {day}
+                                        </a>
+                                    {/if}
+                                {/each}
+                            </div>
                         </div>
                     {/each}
                 </div>
-            {:else}
-                <div
-                    class="rounded-lg border border-white/10 bg-white/5 p-12 text-center"
-                >
-                    <p class="text-white/60">No dates available yet.</p>
-                </div>
-            {/if}
+                {:else}
+                    <div
+                        class="rounded-lg border border-white/10 bg-white/5 p-12 text-center"
+                    >
+                        <p class="text-white/60">No videos available for {currentYear}.</p>
+                    </div>
+                {/if}
+            </div>
         {:else if activeTab === "users"}
             <!-- Users View -->
             {#if allUsers.length > 0}

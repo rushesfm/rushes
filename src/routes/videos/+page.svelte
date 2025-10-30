@@ -31,13 +31,13 @@ import { videosStore, usersStore } from "$lib/stores/library";
 	// State for draggable items in each column
 	let itemsLeft = $state<DashboardItem[]>([{ id: 1, component: "videos" }, { id: 2, component: "sounds" }]);
 
-	let itemsRight = $state<DashboardItem[]>([
-		{ id: 5, component: "profile" },
-		{ id: 6, component: "activity" },
-		{ id: 7, component: "locations" },
-		{ id: 3, component: "members" },
-		{ id: 4, component: "keywords" },
-	]);
+let itemsRight = $state<DashboardItem[]>([
+	{ id: 5, component: "profile" },
+	{ id: 6, component: "activity" },
+	{ id: 7, component: "locations" },
+	{ id: 3, component: "members" },
+	{ id: 4, component: "keywords" },
+]);
 
 	const sectionLabels: Record<DashboardComponentKey, string> = {
 		videos: "Queue overview",
@@ -106,12 +106,13 @@ import { videosStore, usersStore } from "$lib/stores/library";
 		relatedProject: string;
 	}
 
-	let collapsed = $state({
+	let collapsed = $state<Record<DashboardComponentKey, boolean>>({
 		videos: false,
+		profile: false,
+		activity: false,
 		sounds: false,
 		members: false,
 		keywords: false,
-		activity: false,
 		locations: false,
 	});
 
@@ -167,14 +168,14 @@ import { videosStore, usersStore } from "$lib/stores/library";
 		},
 	];
 
-	let tableState = $state({
+	const initialTableState: Record<TableKey, TableState> = {
 		videos: {
 			key: "videos",
 			label: "Queue",
 			sortKey: "uploaded",
 			sortDirection: "desc",
 			defaultSort: { key: "uploaded", direction: "desc" },
-			columns: [],
+			columns: [] as TableColumn[],
 		},
 		sounds: {
 			key: "sounds",
@@ -187,7 +188,7 @@ import { videosStore, usersStore } from "$lib/stores/library";
 				{ key: "recordist", label: "CAPTURED_BY" },
 				{ key: "captured", label: "CAPTURED", align: "right" },
 				{ key: "duration", label: "DURATION", align: "right" },
-			],
+			] as TableColumn[],
 		},
 		members: {
 			key: "members",
@@ -201,7 +202,7 @@ import { videosStore, usersStore } from "$lib/stores/library";
 				{ key: "followers", label: "FOLLOWERS", align: "right" },
 				{ key: "following", label: "FOLLOWING", align: "right" },
 				{ key: "joined", label: "JOINED", align: "right" },
-			],
+			] as TableColumn[],
 		},
 		keywords: {
 			key: "keywords",
@@ -213,8 +214,12 @@ import { videosStore, usersStore } from "$lib/stores/library";
 				{ key: "keyword", label: "TERM" },
 				{ key: "usage", label: "USAGE", align: "right" },
 				{ key: "related", label: "RELATED_PROJECTS" },
-			],
+			] as TableColumn[],
 		},
+	};
+
+	let tableState = $state<Record<TableKey, TableState>>({
+		...initialTableState,
 	});
 
 	function formatDate(iso?: string) {
@@ -406,66 +411,70 @@ import { videosStore, usersStore } from "$lib/stores/library";
 		return formatRuntime(averageSeconds);
 	});
 
-	const latestLocations = $derived<LatestLocationPin[]>(() => {
-		const pins: LatestLocationPin[] = [];
-		for (const video of videos) {
-			const locations = video.locations ?? [];
-			if (!Array.isArray(locations) || locations.length === 0) continue;
-			const timestampValue = getVideoTimestampValue(video);
-			const isoCandidate =
-				typeof (video.timestamp ?? video.uploadDate) === "string"
-					? (video.timestamp ?? video.uploadDate)
-					: null;
-			const uploadedLabel =
-				isoCandidate && !Number.isNaN(Date.parse(isoCandidate))
-					? formatDate(isoCandidate)
-					: typeof video.uploadedAt === "string"
-						? video.uploadedAt
-						: "—";
-			locations.forEach((location, index) => {
-				const coords = getLocationCoordinates(location);
-				if (!coords) return;
-				pins.push({
-					id: `${video.id}-${index}`,
-					videoId: video.id,
-					videoTitle: video.title,
-					videoAuthor: video.author,
-					uploadedLabel,
-					timestampValue,
-					lat: coords.lat,
-					lon: coords.lon,
-					setting: location.setting ?? location.name,
-					thumbnailUrl: video.thumbnailUrl,
+	const latestLocations = $derived(
+		((): LatestLocationPin[] => {
+			const pins: LatestLocationPin[] = [];
+			for (const video of videos) {
+				const locations = video.locations ?? [];
+				if (!Array.isArray(locations) || locations.length === 0) continue;
+				const timestampValue = getVideoTimestampValue(video);
+				const isoCandidate =
+					typeof (video.timestamp ?? video.uploadDate) === "string"
+						? (video.timestamp ?? video.uploadDate)
+						: null;
+				const uploadedLabel =
+					isoCandidate && !Number.isNaN(Date.parse(isoCandidate))
+						? formatDate(isoCandidate)
+						: typeof video.uploadedAt === "string"
+							? video.uploadedAt
+							: "—";
+				locations.forEach((location, index) => {
+					const coords = getLocationCoordinates(location);
+					if (!coords) return;
+					pins.push({
+						id: `${video.id}-${index}`,
+						videoId: video.id,
+						videoTitle: video.title,
+						videoAuthor: video.author,
+						uploadedLabel,
+						timestampValue,
+						lat: coords.lat,
+						lon: coords.lon,
+						setting: location.setting ?? location.name,
+						thumbnailUrl: video.thumbnailUrl,
+					});
 				});
-			});
-		}
-		return pins
-			.sort((a, b) => b.timestampValue - a.timestampValue)
-			.slice(0, 6);
-	});
+			}
+			return pins
+				.sort((a, b) => b.timestampValue - a.timestampValue)
+				.slice(0, 6);
+		})(),
+	);
 
-	const locationCenter = $derived<LocationCenter>(() => {
-		if (latestLocations.length === 0) {
-			return { lat: 20, lon: 0, zoom: 1.6 };
-		}
-		const totals = latestLocations.reduce(
-			(acc, loc) => {
-				acc.lat += loc.lat;
-				acc.lon += loc.lon;
-				return acc;
-			},
-			{ lat: 0, lon: 0 },
-		);
-		const lat = totals.lat / latestLocations.length;
-		const lon = totals.lon / latestLocations.length;
-		const zoom =
-			latestLocations.length === 1
-				? 5.5
-				: latestLocations.length <= 3
-					? 3.2
-					: 2.4;
-		return { lat, lon, zoom };
-	});
+	const locationCenter = $derived(
+		((): LocationCenter => {
+			if (latestLocations.length === 0) {
+				return { lat: 20, lon: 0, zoom: 1.6 };
+			}
+			const totals = latestLocations.reduce(
+				(acc, loc) => {
+					acc.lat += loc.lat;
+					acc.lon += loc.lon;
+					return acc;
+				},
+				{ lat: 0, lon: 0 },
+			);
+			const lat = totals.lat / latestLocations.length;
+			const lon = totals.lon / latestLocations.length;
+			const zoom =
+				latestLocations.length === 1
+					? 5.5
+					: latestLocations.length <= 3
+						? 3.2
+						: 2.4;
+			return { lat, lon, zoom };
+		})(),
+	);
 
 	const heroMetrics = $derived([
 		{
@@ -693,8 +702,8 @@ import { videosStore, usersStore } from "$lib/stores/library";
 					dropTargetClasses: boardDropTargetClasses,
 					flipDurationMs: boardFlipDurationMs,
 				}}
-				on:consider={updateLeftColumn}
-				on:finalize={updateLeftColumn}
+				onconsider={updateLeftColumn}
+				onfinalize={updateLeftColumn}
 			>
 				{#each itemsLeft as item (item.id + (item[SHADOW_ITEM_MARKER_PROPERTY_NAME] ? "-shadow" : ""))}
 					{@const isShadow = Boolean(
@@ -740,8 +749,8 @@ import { videosStore, usersStore } from "$lib/stores/library";
 					dropTargetClasses: boardDropTargetClasses,
 					flipDurationMs: boardFlipDurationMs,
 				}}
-				on:consider={updateRightColumn}
-				on:finalize={updateRightColumn}
+				onconsider={updateRightColumn}
+				onfinalize={updateRightColumn}
 			>
 				{#each itemsRight as item (item.id + (item[SHADOW_ITEM_MARKER_PROPERTY_NAME] ? "-shadow" : ""))}
 					{@const isShadow = Boolean(

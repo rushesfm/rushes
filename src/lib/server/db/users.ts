@@ -5,12 +5,21 @@ import * as schema from './schema';
 import { users, videos, userFollows } from './schema';
 import type { User, UserVideoSummary } from '$lib/types/content';
 import { eq } from 'drizzle-orm';
+import type { User as SupabaseAuthUser } from '@supabase/supabase-js';
 
 // Define the type for your database instance
 type DrizzleDb = PostgresJsDatabase<typeof schema>;
 
 const DEFAULT_AVATAR = 'https://i.pravatar.cc/150?img=15';
 const DEFAULT_THUMBNAIL = 'https://placehold.co/400x225?text=Video';
+
+function slugify(value: string): string {
+    return value
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/^-+|-+$/g, '')
+        .replace(/-{2,}/g, '-');
+}
 
 // --- Internal Helper Functions ---
 
@@ -71,7 +80,10 @@ function formatUser(row: typeof users.$inferSelect, options: {
         videos,
         recentVideos: videos.slice(0, 3),
         subscribers: followers,
-        joinedAt: row.createdAt ?? undefined
+        joinedAt:
+            row.createdAt instanceof Date
+                ? row.createdAt.toISOString()
+                : row.createdAt ?? undefined
     };
 }
 
@@ -156,4 +168,82 @@ export async function getUserBySlug(db: DrizzleDb, slug: string): Promise<User |
         followers: followersSet.size,
         following: followingSet.size
     });
+}
+
+type DbUser = typeof users.$inferSelect;
+
+export async function ensureUserForAuth(db: DrizzleDb, authUser: SupabaseAuthUser): Promise<DbUser> {
+    const authId = authUser.id;
+    const [existing] = await db
+        .select()
+        .from(users)
+        .where(eq(users.authId, authId))
+        .limit(1)
+        .execute();
+
+    if (existing) {
+        return existing;
+    }
+
+    const fallbackSegment = authId.slice(0, 8);
+    const preferredName =
+        typeof authUser.user_metadata?.name === 'string' && authUser.user_metadata.name.trim().length > 0
+            ? authUser.user_metadata.name.trim()
+            : authUser.email ?? `Creator ${fallbackSegment}`;
+
+    const baseSlug = (() => {
+        const fromMetadata =
+            typeof authUser.user_metadata?.slug === 'string' ? authUser.user_metadata.slug.trim() : '';
+        const candidateSource = fromMetadata || preferredName || fallbackSegment;
+        const generated = slugify(candidateSource);
+        return generated.length > 0 ? generated : `user-${fallbackSegment}`;
+    })();
+
+    let slugCandidate = baseSlug;
+    let attempt = 0;
+    while (true) {
+        const [conflict] = await db
+            .select({ id: users.id })
+            .from(users)
+            .where(eq(users.slug, slugCandidate))
+            .limit(1)
+            .execute();
+
+        if (!conflict) {
+            break;
+        }
+
+        attempt += 1;
+        slugCandidate = `${baseSlug}-${attempt}`;
+    }
+
+    try {
+        const [created] = await db
+            .insert(users)
+            .values({
+                slug: slugCandidate,
+                name: preferredName,
+                avatar: null,
+                bio: null,
+                authId
+            })
+            .returning();
+
+        if (created) {
+            return created;
+        }
+    } catch (error) {
+        const [conflict] = await db
+            .select()
+            .from(users)
+            .where(eq(users.authId, authId))
+            .limit(1)
+            .execute();
+        if (conflict) {
+            return conflict;
+        }
+        throw error;
+    }
+
+    throw new Error('Failed to ensure creator record for authenticated user.');
 }

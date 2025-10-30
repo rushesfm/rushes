@@ -24,10 +24,9 @@
 		initialZoom?: number;
 		activeVideoId?: string | null;
 	}
+  const props = $props() as Props;
 
-  const props = $props<Props>();
-
-  let locations = $state(props.locations ?? []);
+  let locations = $state<Location[]>(props.locations ?? []);
   let initialCenterLat = $state(props.initialCenterLat ?? 0);
   let initialCenterLon = $state(props.initialCenterLon ?? 0);
   let initialZoom = $state(props.initialZoom ?? 2);
@@ -124,9 +123,9 @@
 
 	function findLocationByVideoId(videoId: string | null): Location | null {
 		if (!videoId) return null;
-		return (
-			locations.find((loc) => (loc as any).videoId === videoId) ?? null
-		);
+	return (
+		locations.find((loc) => loc.videoId === videoId) ?? null
+	);
 	}
 
 	function focusOnVideo(

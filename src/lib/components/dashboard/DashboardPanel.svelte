@@ -67,8 +67,9 @@
 
 	const isShadow = $derived(Boolean(item[SHADOW_ITEM_MARKER_PROPERTY_NAME]));
 
-	const mapPins = $derived(() =>
-		latestLocations.map((loc) => ({
+const mapPins = $derived(
+	(() =>
+		latestLocations.map((loc: LatestLocationPin) => ({
 			mapLat: loc.lat,
 			mapLon: loc.lon,
 			setting: loc.setting,
@@ -76,7 +77,8 @@
 			videoTitle: loc.videoTitle,
 			videoAuthor: loc.videoAuthor
 		}))
-	);
+	)()
+);
 
 	const auth = $derived($authStore);
 
@@ -160,7 +162,7 @@
 	<section class="min-w-0 border border-white/10 bg-white/[0.04] p-6">
 		<header class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 			<div class="flex items-center gap-4">
-				<button class="cursor-grab">
+				<button class="cursor-grab" aria-label="Drag panel">
 					<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none" class="text-slate-500">
 						<path d="M6 4h1v1H6V4zm3 0h1v1H9V4zM6 7h1v1H6V7zm3 0h1v1H9V7zm-3 3h1v1H6v-1zm3 3h1v1H9v-1zm0-3h1v1H9v-1z" fill="currentColor"></path>
 					</svg>
@@ -171,7 +173,7 @@
 			</div>
 			<div class="flex items-center gap-4">
 				<span class="text-[11px] text-slate-500">SORT {tableState.videos.sortKey.toUpperCase()} [{tableState.videos.sortDirection.toUpperCase()}]</span>
-				<button on:click={() => toggleCollapse('videos')}>{collapsed.videos ? '+' : '-'}</button>
+				<button onclick={() => toggleCollapse('videos')}>{collapsed.videos ? '+' : '-'}</button>
 			</div>
 		</header>
 		{#if !collapsed.videos}
@@ -201,12 +203,12 @@
 					<div class="mt-6 min-w-0 space-y-4">
 						<div class="grid min-w-0 gap-3 sm:grid-cols-2">
 							{#each sortedVideoRows.slice(1, 5) as row, index (row.id)}
-								<button
-									type="button"
-									class="group flex min-w-0 items-center gap-4 rounded-lg overflow-hidden border border-white/5 bg-white/[0.06] text-left transition hover:border-white/15 hover:bg-white/[0.1]"
-									on:click={(event) => openVideo(row.original, event)}
-									on:keydown={(event) => handleVideoRowKey(event, row.original)}
-								>
+									<button
+										type="button"
+										class="group flex min-w-0 items-center gap-4 rounded-lg overflow-hidden border border-white/5 bg-white/[0.06] text-left transition hover:border-white/15 hover:bg-white/[0.1]"
+										onclick={(event) => openVideo(row.original, event)}
+										onkeydown={(event) => handleVideoRowKey(event, row.original)}
+									>
 								<div class="flex flex-col items-center">
 										<img
 											src={row.original.thumbnailUrl ?? 'https://placehold.co/160x90?text=Rushes'}
@@ -251,7 +253,7 @@
 					<button
 						class="rounded-full border border-white/15 bg-white/[0.08] px-5 py-2 text-[11px] uppercase tracking-[0.3em] text-slate-200 transition hover:border-white/30 hover:bg-white/[0.14] hover:text-white"
 						type="button"
-						on:click={handleLogout}
+						onclick={handleLogout}
 					>
 						Sign out
 					</button>
@@ -279,7 +281,13 @@
 					<h3 class="text-lg font-semibold text-white">Join Rushes</h3>
 					<p class="mt-1 text-sm text-slate-400">Create an account to sync playlists, follow curators, and save notes.</p>
 				</div>
-				<form class="space-y-4" on:submit|preventDefault={handleAuthSubmit}>
+		<form
+			class="space-y-4"
+			onsubmit={(event) => {
+				event.preventDefault();
+				handleAuthSubmit(event);
+			}}
+		>
 					<div class="space-y-2">
 						<label class="text-[10px] uppercase tracking-[0.3em] text-slate-500" for="dashboard-name">Name</label>
 						<input
@@ -323,14 +331,14 @@
 	<section class="min-w-0 border border-white/10 bg-white/[0.04] p-6">
 		<header class="flex items-center justify-between">
 			<div class="flex items-center gap-4">
-				<button class="cursor-grab">
+		<button class="cursor-grab" aria-label="Drag panel">
 					<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none" class="text-slate-500">
 						<path d="M6 4h1v1H6V4zm3 0h1v1H9V4zM6 7h1v1H6V7zm3 0h1v1H9V7zm-3 3h1v1H6v-1zm3 3h1v1H9v-1zm0-3h1v1H9v-1z" fill="currentColor"></path>
 					</svg>
 				</button>
 				<p class="text-[10px] uppercase tracking-[0.35em] text-slate-500">Live Activity</p>
 			</div>
-			<button on:click={() => toggleCollapse('activity')}>{collapsed.activity ? '+' : '-'}</button>
+			<button onclick={() => toggleCollapse('activity')}>{collapsed.activity ? '+' : '-'}</button>
 		</header>
 		{#if !collapsed.activity}
 			<div class="mt-4 space-y-3" transition:slide>
@@ -366,7 +374,7 @@
 	<section class="min-w-0 border border-white/10 bg-white/[0.04] p-6">
 		<header class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 			<div class="flex items-center gap-4">
-				<button class="cursor-grab">
+		<button class="cursor-grab" aria-label="Drag panel">
 					<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none" class="text-slate-500">
 						<path d="M6 4h1v1H6V4zm3 0h1v1H9V4zM6 7h1v1H6V7zm3 0h1v1H9V7zm-3 3h1v1H6v-1zm3 3h1v1H9v-1zm0-3h1v1H9v-1z" fill="currentColor"></path>
 					</svg>
@@ -377,7 +385,7 @@
 			</div>
 			<div class="flex items-center gap-4">
 				<span class="text-[11px] text-slate-500">SORT {tableState.sounds.sortKey.toUpperCase()} [{tableState.sounds.sortDirection.toUpperCase()}]</span>
-				<button on:click={() => toggleCollapse('sounds')}>{collapsed.sounds ? '+' : '-'}</button>
+				<button onclick={() => toggleCollapse('sounds')}>{collapsed.sounds ? '+' : '-'}</button>
 			</div>
 		</header>
 		{#if !collapsed.sounds}
@@ -391,7 +399,7 @@
 										<button
 											type="button"
 											class="flex items-center gap-2 text-[11px] uppercase tracking-[0.25em] text-slate-500 transition hover:text-slate-200"
-											on:click={() => toggleSort('sounds', column.key)}
+											onclick={() => toggleSort('sounds', column.key)}
 										>
 											<span>{column.label}</span>
 											{#if tableState.sounds.sortKey === column.key}<span aria-hidden="true">{tableState.sounds.sortDirection === 'asc' ? '▲' : '▼'}</span>{/if}
@@ -423,7 +431,7 @@
 	<section class="min-w-0 border border-white/10 bg-white/[0.04] p-6">
 		<header class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 			<div class="flex items-center gap-4">
-				<button class="cursor-grab">
+		<button class="cursor-grab" aria-label="Drag panel">
 					<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none" class="text-slate-500">
 						<path d="M6 4h1v1H6V4zm3 0h1v1H9V4zM6 7h1v1H6V7zm3 0h1v1H9V7zm-3 3h1v1H6v-1zm3 3h1v1H9v-1zm0-3h1v1H9v-1z" fill="currentColor"></path>
 					</svg>
@@ -434,7 +442,7 @@
 			</div>
 			<div class="flex items-center gap-4">
 				<span class="text-[11px] text-slate-500">SORT {tableState.members.sortKey.toUpperCase()} [{tableState.members.sortDirection.toUpperCase()}]</span>
-				<button on:click={() => toggleCollapse('members')}>{collapsed.members ? '+' : '-'}</button>
+				<button onclick={() => toggleCollapse('members')}>{collapsed.members ? '+' : '-'}</button>
 			</div>
 		</header>
 		{#if !collapsed.members}
@@ -448,7 +456,7 @@
 										<button
 											type="button"
 											class="flex items-center gap-2 text-[11px] uppercase tracking-[0.25em] text-slate-500 transition hover:text-slate-200"
-											on:click={() => toggleSort('members', column.key)}
+											onclick={() => toggleSort('members', column.key)}
 										>
 											<span>{column.label}</span>
 											{#if tableState.members.sortKey === column.key}<span aria-hidden="true">{tableState.members.sortDirection === 'asc' ? '▲' : '▼'}</span>{/if}
@@ -481,7 +489,7 @@
 	<section class="min-w-0 border border-white/10 bg-white/[0.04] p-6">
 		<header class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
 			<div class="flex items-center gap-4">
-				<button class="cursor-grab">
+		<button class="cursor-grab" aria-label="Drag panel">
 					<svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16" fill="none" class="text-slate-500">
 						<path d="M6 4h1v1H6V4zm3 0h1v1H9V4zM6 7h1v1H6V7zm3 0h1v1H9V7zm-3 3h1v1H6v-1zm3 3h1v1H9v-1zm0-3h1v1H9v-1z" fill="currentColor"></path>
 					</svg>
@@ -492,7 +500,7 @@
 			</div>
 			<div class="flex items-center gap-4">
 				<span class="text-[11px] text-slate-500">SORT {tableState.keywords.sortKey.toUpperCase()} [{tableState.keywords.sortDirection.toUpperCase()}]</span>
-				<button on:click={() => toggleCollapse('keywords')}>{collapsed.keywords ? '+' : '-'}</button>
+				<button onclick={() => toggleCollapse('keywords')}>{collapsed.keywords ? '+' : '-'}</button>
 			</div>
 		</header>
 		{#if !collapsed.keywords}
@@ -506,7 +514,7 @@
 										<button
 											type="button"
 											class="flex items-center gap-2 text-[11px] uppercase tracking-[0.25em] text-slate-500 transition hover:text-slate-200"
-											on:click={() => toggleSort('keywords', column.key)}
+											onclick={() => toggleSort('keywords', column.key)}
 										>
 											<span>{column.label}</span>
 											{#if tableState.keywords.sortKey === column.key}<span aria-hidden="true">{tableState.keywords.sortDirection === 'asc' ? '▲' : '▼'}</span>{/if}
@@ -547,7 +555,7 @@
 					<p class="text-[11px] text-slate-500/70">Recent shoots plotted across the Rushes.fm map.</p>
 				</div>
 			</div>
-			<button on:click={() => toggleCollapse('locations')}>{collapsed.locations ? '+' : '-'}</button>
+			<button onclick={() => toggleCollapse('locations')}>{collapsed.locations ? '+' : '-'}</button>
 		</header>
 		{#if !collapsed.locations}
 			<div class="mt-5 grid gap-6 lg:grid-cols-5" transition:slide>

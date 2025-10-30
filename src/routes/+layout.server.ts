@@ -10,13 +10,14 @@ const DATABASE_TIMEOUT_MS = 10000;
 export const load: LayoutServerLoad = async ({ platform }) => {
 	console.log('--- LAYOUT SERVER LOAD START ---');
 
-	if (!platform?.env.DATABASE_URL) {
+	const databaseUrl = platform?.env?.DATABASE_URL;
+	if (!databaseUrl) {
 		console.error('Failed to load: DATABASE_URL binding not found.');
 		return { videos: [], users: [], error: 'Database not configured.' };
 	}
 
 	// 1. Create the db instance from the binding
-	const db = getDb(platform.env.DATABASE_URL);
+	const db = getDb(databaseUrl);
 
 	console.log('Attempting to fetch videos and users...');
 

@@ -1,5 +1,6 @@
 import {
 	pgTable,
+	pgSchema,
 	text,
 	integer,
 	doublePrecision,
@@ -7,8 +8,15 @@ import {
 	uniqueIndex,
 	index,
 	serial,
-	timestamp
+	timestamp,
+	uuid
 } from 'drizzle-orm/pg-core';
+
+const authSchema = pgSchema('auth');
+
+export const authUsers = authSchema.table('users', {
+	id: uuid('id').primaryKey()
+});
 
 export const users = pgTable(
 	'users',
@@ -18,10 +26,12 @@ export const users = pgTable(
 		name: text('name').notNull(),
 		avatar: text('avatar'),
 		bio: text('bio'),
+		authId: uuid('auth_id').references(() => authUsers.id, { onDelete: 'set null' }),
 		createdAt: timestamp('created_at', { withTimezone: true }).defaultNow()
 	},
 	(table) => ({
-		slugIdx: uniqueIndex('users_slug_unique').on(table.slug)
+		slugIdx: uniqueIndex('users_slug_unique').on(table.slug),
+		authIdx: uniqueIndex('users_auth_id_unique').on(table.authId)
 	})
 );
 

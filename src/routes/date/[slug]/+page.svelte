@@ -1,7 +1,10 @@
 <script lang="ts">
     import { page } from "$app/stores";
+    import { browser } from "$app/environment";
     import { videosStore } from "$lib/stores/library";
     import { selectedVideo } from "$lib/stores/selectedVideo";
+    import type { QueueContext } from "$lib/stores/selectedVideo";
+    import { trackDirectLoad } from "$lib/utils/direct-load";
 
     const videos = $derived($videosStore);
     const slug = $derived($page.params.slug);
@@ -159,6 +162,54 @@
         }
         return "";
     }
+
+    function handlePlayAll() {
+        if (filteredVideos.length === 0) return;
+        const videoIds = filteredVideos.map((v) => v.id);
+        const context: QueueContext = {
+            type: "date",
+            label: getDateTitle(),
+            videoIds
+        };
+        selectedVideo.setTemporaryQueue(videoIds, context);
+    }
+
+    // Track if auto-play has been triggered (prevent duplicate triggers)
+    let autoPlayTriggered = $state(false);
+    let wasDirectLoad = $state(false);
+
+    trackDirectLoad((value) => {
+        wasDirectLoad = value;
+    });
+    
+    // Auto-play on direct page load (not internal navigation)
+    // Use $effect to ensure stores are ready
+    $effect(() => {
+        if (!browser) return;
+        if (autoPlayTriggered) return;
+        if (!wasDirectLoad) return; // Only for direct loads
+        
+        const videos = filteredVideos;
+        const hasQueueContext = !!$selectedVideo.queueContext;
+        
+        // Wait for videos to be loaded and stores initialized
+        if (videos.length === 0) return;
+        
+        // Only auto-play if:
+        // 1. No queue context (not interrupting playback)
+        // 2. We have videos
+        // 3. This was a direct load
+        if (!hasQueueContext && videos.length > 0) {
+            autoPlayTriggered = true;
+            
+            // Small delay to ensure everything is ready
+            setTimeout(() => {
+                if (filteredVideos.length > 0) {
+                    handlePlayAll();
+                }
+            }, 300);
+        }
+    });
 </script>
 
 <div class="min-h-screen p-8">
@@ -173,12 +224,45 @@
                         ← Back to Browse
                     </a>
                 </div>
-                <h1 class="text-3xl font-bold text-white mb-2">
-                    {getDateTitle()}
-                </h1>
-                <p class="text-white/60 text-sm">
-                    {getDateDescription()}
-                </p>
+                <div class="flex items-center justify-between mb-2">
+                    <div>
+                        <h1 class="text-3xl font-bold text-white mb-2">
+                            {getDateTitle()}
+                        </h1>
+                        <p class="text-white/60 text-sm">
+                            {getDateDescription()}
+                        </p>
+                    </div>
+                    {#if filteredVideos.length > 0}
+                        <button
+                            onclick={handlePlayAll}
+                            class="px-4 py-2 bg-orange-500/20 text-orange-400 border border-orange-500/40 rounded-lg hover:bg-orange-500/30 transition-colors font-medium text-sm flex items-center gap-2"
+                        >
+                            <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                width="18"
+                                height="18"
+                                fill="none"
+                                stroke="currentColor"
+                                viewBox="0 0 24 24"
+                            >
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"
+                                />
+                                <path
+                                    stroke-linecap="round"
+                                    stroke-linejoin="round"
+                                    stroke-width="2"
+                                    d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+                                />
+                            </svg>
+                            Play All
+                        </button>
+                    {/if}
+                </div>
             </header>
 
             {#if filteredVideos.length > 0}

@@ -8,11 +8,14 @@
     import Sidebar from "$lib/components/Sidebar.svelte";
     import PersistentVideoPlayer from "$lib/components/PersistentVideoPlayer.svelte";
     import { page } from "$app/stores";
+    import { afterNavigate } from "$app/navigation";
     import Playing from "$lib/components/Playing.svelte";
     import { selectedVideo } from "$lib/stores/selectedVideo";
     import MuxVideoPlayer from "$lib/components/MuxVideoPlayer.svelte";
     import VideoTimeline from "$lib/components/VideoTimeline.svelte";
     import VideoInfo from "$lib/components/VideoInfo.svelte";
+    import QueueBanner from "$lib/components/QueueBanner.svelte";
+    import Breadcrumbs from "$lib/components/Breadcrumbs.svelte";
     import type { LayoutData } from "./$types";
     import type { Video } from "$lib/types/content";
     import {
@@ -21,6 +24,8 @@
         getVideoById as lookupVideo,
     } from "$lib/stores/library";
     import { uiState, actions } from "$lib/stores/appStore";
+    import { setContext } from "svelte";
+    import type { BreadcrumbItem } from "$lib/types/navigation";
 
     let { children, data } = $props<{
         children: () => any;
@@ -107,28 +112,48 @@
     let liveTargetVideoId = $state<string | null>(null);
     let liveSourceSignature = $state("");
 
+    // Track previous queue context state to detect when it's cleared
+    let previousQueueContext = $state(false);
+    
     $effect(() => {
         if (!browser) return;
         const videos = videoLibrary;
         if (!videos || videos.length === 0) return;
+        
+        const queueContext = $selectedVideo.queueContext;
+        const queueContextWasCleared = previousQueueContext && !queueContext;
+        previousQueueContext = !!queueContext;
+        
+        // Only compute live playback if there's no active queue context
+        if (queueContext) {
+            // When a queue context exists, don't compute live playback
+            return;
+        }
 
         const signature = videos
             .map((video) => `${video.id}:${getVideoDuration(video)}`)
             .join("|");
-        if (liveSourceSignature === signature && liveTargetVideoId) {
-            return;
-        }
+        
+        // Always recompute if:
+        // 1. Queue context was just cleared (force fresh timestamp)
+        // 2. Signature doesn't match (video library changed)
+        // 3. No target video set yet
+        const shouldRecompute = queueContextWasCleared || 
+                                liveSourceSignature !== signature || 
+                                !liveTargetVideoId;
 
-        const now = Math.floor(Date.now() / 1000);
-        const playback = computeLivePlayback(videos, now);
-        if (!playback) return;
+        if (shouldRecompute) {
+            const now = Math.floor(Date.now() / 1000);
+            const playback = computeLivePlayback(videos, now);
+            if (!playback) return;
 
-        liveStartTime = playback.startTime;
-        liveTargetVideoId = playback.video.id;
-        liveSourceSignature = signature;
+            liveStartTime = playback.startTime;
+            liveTargetVideoId = playback.video.id;
+            liveSourceSignature = signature;
 
-        if (selectedVideoId !== playback.video.id) {
-            selectedVideo.selectVideo(playback.video.id);
+            if (selectedVideoId !== playback.video.id) {
+                selectedVideo.selectVideo(playback.video.id);
+            }
         }
     });
 
@@ -154,6 +179,7 @@
         });
         return () => unsubscribe();
     });
+
 
     onMount(() => {
         theme.init();
@@ -194,6 +220,30 @@
             $page.url.pathname === "/live",
     );
     const showPipPlayer = $derived(!isVideoPage && $activeVideo !== null);
+    
+    // Use startTime = 0 when a temporary queue is active, otherwise use live timestamp
+    const videoStartTime = $derived(
+        $selectedVideo.queueContext ? 0 : liveStartTime
+    );
+
+    let breadcrumbOverride = $state<BreadcrumbItem[] | null>(null);
+
+    const breadcrumbController = {
+        set(items: BreadcrumbItem[]) {
+            breadcrumbOverride = items;
+        },
+        clear() {
+            breadcrumbOverride = null;
+        }
+    };
+
+    setContext("breadcrumbs", breadcrumbController);
+
+    afterNavigate(() => {
+        breadcrumbOverride = null;
+    });
+
+    const layoutBreadcrumbs = $derived(() => breadcrumbOverride ?? undefined);
 </script>
 
 <svelte:head>
@@ -226,6 +276,7 @@
             <div id="scroll-content" class="flex-1 overflow-y-auto">
                 <div class="flex flex-col min-h-full gap-6">
                     <div class="flex-none" id="video-wrapper">
+                        <QueueBanner />
                         <div
                             id="video-aspect-container"
                             class="relative aspect-video w-full border-b border-white/10 bg-black shadow-[0_24px_80px_-48px_rgba(8,47,73,0.85)]"
@@ -234,8 +285,8 @@
                                 <MuxVideoPlayer
                                     src={currentVideo?.videoUrl}
                                     autoplayUserPreference={true}
-                                    startTime={liveStartTime}
-                                    playerKey={`sidebar-player-${currentVideo?.id ?? "none"}-${Math.floor(liveStartTime)}`}
+                                    startTime={videoStartTime}
+                                    playerKey={`sidebar-player-${currentVideo?.id ?? "none"}-${Math.floor(videoStartTime)}-${$selectedVideo.queueContext ? 'queue' : 'live'}`}
                                 />
                             </div>
                         </div>
@@ -265,6 +316,7 @@
                 style="height: 100vh; overflow-y: scroll;"
                 style:view-transition-name="main-content"
             >
+                <Breadcrumbs items={layoutBreadcrumbs} />
                 {@render children()}
             </main>
         </div>

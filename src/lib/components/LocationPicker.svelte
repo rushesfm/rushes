@@ -52,7 +52,9 @@
 		lon: number,
 		options: { notify?: boolean; animate?: boolean } = {}
 	) {
-		if (!map || !mapboxModule) return;
+		const mapInstance = map;
+		const mapbox = mapboxModule;
+		if (!mapInstance || !mapbox) return;
 		if (!coordinatesInRange(lat, lon)) return;
 
 		currentLat = lat;
@@ -61,9 +63,9 @@
 		if (marker) {
 			marker.setLngLat([lon, lat]);
 		} else {
-			marker = new mapboxModule.Marker({ color: '#f59e0b', draggable: true })
+			marker = new mapbox.Marker({ color: '#f59e0b', draggable: true })
 				.setLngLat([lon, lat])
-				.addTo(map);
+				.addTo(mapInstance);
 
 			marker.on('dragend', () => {
 				if (!marker) return;
@@ -73,19 +75,19 @@
 		}
 
 		const animate = options.animate ?? true;
-		const zoom = map.getZoom ? Math.max(map.getZoom(), 12) : 12;
+		const zoom = mapInstance.getZoom ? Math.max(mapInstance.getZoom(), 12) : 12;
 		const move = () => {
 			if (animate) {
-				map.easeTo({ center: [lon, lat], zoom, duration: 800 });
+				mapInstance.easeTo({ center: [lon, lat], zoom, duration: 800 });
 			} else {
-				map.jumpTo({ center: [lon, lat], zoom });
+				mapInstance.jumpTo({ center: [lon, lat], zoom });
 			}
 		};
 
-		if (map.isStyleLoaded()) {
+		if (mapInstance.isStyleLoaded()) {
 			move();
 		} else {
-			map.once('load', move);
+			mapInstance.once('load', move);
 		}
 
 		if (options.notify ?? true) {

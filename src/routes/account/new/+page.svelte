@@ -3,7 +3,7 @@
     import { enhance } from "$app/forms";
     import type { PageData, ActionData } from "./$types";
     import LocationPicker from "$lib/components/LocationPicker.svelte";
-    import { goto } from "$app/navigation";
+    import { goto, invalidateAll } from "$app/navigation";
     import { onDestroy } from "svelte";
     import { Upload } from "tus-js-client";
     import BreadcrumbBar from "$lib/components/BreadcrumbBar.svelte";
@@ -231,8 +231,10 @@
         uploadStatus === "success" && (Boolean(videoUrl) || Boolean(bunnyVideoId)),
     );
     const submitDisabled = $derived(
-        isSubmitting || !uploadCompleted || isProcessing || !data.uploader,
+        isSubmitting || isProcessing || !data.uploader || !videoFile,
     );
+
+    const isUploading = $derived(uploadStatus === "uploading" || uploadStatus === "creating");
 
 
     $effect(() => {
@@ -430,23 +432,105 @@
         updateWordCount();
     });
 
-    function handleSubmit() {
-        if (!uploadCompleted) {
-            uploadError =
-                uploadStatus === "error"
-                    ? uploadError
-                    : "Please finish uploading the video before saving.";
+    async function waitForUploadComplete(): Promise<boolean> {
+        if (uploadCompleted) {
+            return true;
         }
+
+        if (uploadStatus === "error") {
+            return false;
+        }
+
+        // Start upload if not already started
+        if (uploadStatus === "idle" && videoFile) {
+            await startTusUpload();
+        } else if (uploadStatus === "paused" && tusUpload) {
+            resumeTusUpload();
+        }
+
+        // Wait for upload to complete or error
+        return new Promise((resolve) => {
+            const checkInterval = setInterval(() => {
+                if (uploadStatus === "success") {
+                    clearInterval(checkInterval);
+                    resolve(true);
+                } else if (uploadStatus === "error") {
+                    clearInterval(checkInterval);
+                    resolve(false);
+                }
+            }, 100);
+
+            // Timeout after 5 minutes
+            setTimeout(() => {
+                clearInterval(checkInterval);
+                resolve(false);
+            }, 5 * 60 * 1000);
+        });
+    }
+
+    function handleSubmit({ cancel }: { cancel: () => void }) {
         if (!data.uploader) {
             uploadError = "Your account isn't linked to a creator profile yet.";
-            return async () => {};
+            cancel();
+            return;
         }
+
+        if (!videoFile) {
+            uploadError = "Please select a video file.";
+            cancel();
+            return;
+        }
+
+        if (!title?.trim()) {
+            uploadError = "Please enter a title.";
+            cancel();
+            return;
+        }
+
+        if (!description?.trim()) {
+            uploadError = "Please enter a description.";
+            cancel();
+            return;
+        }
+
+        // If upload is not complete, prevent submission and start upload
+        if (!uploadCompleted) {
+            isSubmitting = true;
+            cancel();
+            
+            (async () => {
+                // Start upload if not already started
+                if (uploadStatus === "idle" && videoFile) {
+                    await startTusUpload();
+                } else if (uploadStatus === "paused" && tusUpload) {
+                    resumeTusUpload();
+                }
+                
+                // Wait for upload to complete
+                const success = await waitForUploadComplete();
+                if (success) {
+                    // Upload complete, now submit the form programmatically
+                    const form = document.querySelector('form') as HTMLFormElement;
+                    if (form) {
+                        form.requestSubmit();
+                    }
+                } else {
+                    isSubmitting = false;
+                    uploadError = uploadError || "Upload failed. Please try again.";
+                }
+            })();
+            return;
+        }
+
+        // Upload is complete, allow normal submission
         isSubmitting = true;
         return async ({ result, update }: any) => {
             isSubmitting = false;
 
             if (result.type === "success" && result.data?.success) {
-                // Redirect to the video page or library
+                // Invalidate all data to refresh
+                await invalidateAll();
+                // Redirect to the account page with the new video
                 goto(`/account?uploaded=${result.data.videoId}`).catch(() => {
                     goto("/account");
                 });
@@ -507,356 +591,329 @@
             </div>
         {/if}
 
-        <!-- Video File Picker -->
-        <div class="form-group">
-            <label for="video-file" class="label">Video File *</label>
-            <div class="file-input-wrapper">
-                <label class="file-picker" class:has-file={videoFile}>
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                        <path
-                            d="M21 15V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V15"
-                            stroke="currentColor"
-                            stroke-width="2"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                        />
-                        <path
-                            d="M17 8L12 3L7 8"
-                            stroke="currentColor"
-                            stroke-width="2"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                        />
-                        <path
-                            d="M12 3V15"
-                            stroke="currentColor"
-                            stroke-width="2"
-                            stroke-linecap="round"
-                            stroke-linejoin="round"
-                        />
-                    </svg>
-                    <span
-                        >{videoFile
-                            ? videoFile.name
-                            : "Choose a video file"}</span
-                    >
-                    <input
-                        id="video-file"
-                        type="file"
-                        accept="video/*"
-                        onchange={handleFileSelect}
-                        name="localVideoFile"
-                    />
-                </label>
-                {#if videoFile}
-                    <div class="file-info">
-                        <span class="file-size"
-                            >{(videoFile.size / 1024 / 1024).toFixed(2)} MB</span
-                        >
-                        {#if duration > 0}
-                            <span class="file-duration"
-                                >{Math.floor(duration / 60)}:{(duration % 60)
-                                    .toString()
-                                    .padStart(2, "0")}</span
-                            >
-                        {/if}
+        {#if isUploading}
+            <!-- Only show upload progress/panel when uploading -->
+            <div class="upload-panel">
+                {#if uploadStatus === "creating"}
+                    <div class="upload-status in-progress">
+                        <div class="spinner-small"></div>
+                        <span>Preparing secure upload...</span>
                     </div>
-                    <div class="upload-panel">
-                        <div class="upload-actions">
-                            {#if uploadStatus === "idle"}
-                                <button
-                                    type="button"
-                                    class="upload-btn"
-                                    onclick={startTusUpload}
-                                    disabled={!data.uploader}
-                                >
-                                    Start Upload
-                                </button>
-                                <span class="upload-hint"
-                                    >Uploads are resumable — you can pause and continue later.</span
-                                >
-                            {:else if uploadStatus === "creating"}
-                                <div class="upload-status in-progress">
-                                    <div class="spinner-small"></div>
-                                    <span>Preparing secure upload...</span>
-                                </div>
-                            {:else if uploadStatus === "uploading"}
-                                <button type="button" class="upload-btn" onclick={pauseTusUpload}>
-                                    Pause
-                                </button>
-                                <span class="upload-hint">Uploading… {uploadProgress}%</span>
-                            {:else if uploadStatus === "paused"}
-                                <button type="button" class="upload-btn" onclick={resumeTusUpload}>
-                                    Resume Upload
-                                </button>
-                                <span class="upload-hint">Upload paused at {uploadProgress}%.</span>
-                            {:else if uploadStatus === "success"}
-                                <span class="upload-hint success"
-                                    >Upload complete. You can now save this video.</span
-                                >
-                            {:else if uploadStatus === "error"}
-                                <span class="upload-hint error">Upload failed.</span>
-                                <button type="button" class="upload-btn" onclick={startTusUpload}>
-                                    Retry Upload
-                                </button>
-                            {/if}
-                        </div>
-                        {#if uploadStatus !== "idle" || uploadProgress > 0}
-                            <div
-                                class="upload-progress-bar"
-                                role="progressbar"
-                                aria-valuemin="0"
-                                aria-valuemax="100"
-                                aria-valuenow={Math.min(100, uploadProgress)}
-                            >
-                                <div
-                                    class="upload-progress-fill"
-                                    style={`width: ${Math.min(100, uploadProgress)}%`}
-                                ></div>
-                            </div>
-                            <div class="upload-progress-meta">
-                                <span>{uploadProgress}%</span>
-                                <span>{formatBytes(bytesUploaded)} / {formatBytes(totalBytes)}</span>
-                            </div>
-                        {/if}
-                        {#if uploadStatus === "error" && uploadError}
+                {:else if uploadStatus === "uploading"}
+                    <div class="upload-status in-progress">
+                        <div class="spinner-small"></div>
+                        <span>Uploading… {uploadProgress}%</span>
+                    </div>
+                    <div
+                        class="upload-progress-bar"
+                        role="progressbar"
+                        aria-valuemin="0"
+                        aria-valuemax="100"
+                        aria-valuenow={Math.min(100, uploadProgress)}
+                    >
+                        <div
+                            class="upload-progress-fill"
+                            style={`width: ${Math.min(100, uploadProgress)}%`}
+                        ></div>
+                    </div>
+                    <div class="upload-progress-meta">
+                        <span>{uploadProgress}%</span>
+                        <span>{formatBytes(bytesUploaded)} / {formatBytes(totalBytes)}</span>
+                    </div>
+                {:else if uploadStatus === "error"}
+                    <div class="upload-status error">
+                        <span class="upload-hint error">Upload failed.</span>
+                        {#if uploadError}
                             <p class="upload-error">{uploadError}</p>
                         {/if}
                     </div>
                 {/if}
             </div>
-            {#if isProcessing}
-                <div class="processing-status">
-                    <div class="spinner"></div>
-                    <span>{processingStatus}</span>
-                </div>
-            {/if}
-        </div>
-
-        <!-- Video Preview -->
-        {#if videoPreviewUrl && !isProcessing}
+        {:else}
+            <!-- EVERYTHING ELSE IN THE FORM GOES HERE: file picker, preview, title, uploader, date, map, description, etc. -->
+            <!-- preserve upload-panel after file pick, before upload (if any) if you want-->
+            <!-- Video File Picker -->
             <div class="form-group">
-                <label class="label" for="video-preview">Preview</label>
-                <video id="video-preview" class="video-preview" src={videoPreviewUrl} controls>
-                    <track kind="captions" label="No captions" />
-                </video>
-            </div>
-        {/if}
-
-        <!-- Title -->
-        <div class="form-group">
-            <label for="title" class="label">Title *</label>
-            <input
-                id="title"
-                name="title"
-                type="text"
-                class="input"
-                bind:value={title}
-                placeholder="Enter video title"
-                required
-                maxlength="200"
-            />
-        </div>
-
-        <!-- Uploader -->
-        <div class="form-group">
-            <label class="label" for="uploader-pill">Uploading as</label>
-            <div id="uploader-pill" class="uploader-pill">
-                <span class="uploader-avatar">{uploaderDisplayName.slice(0, 1).toUpperCase()}</span>
-                <div class="uploader-details">
-                    <span class="uploader-name">{uploaderDisplayName}</span>
-                    {#if data.sessionUser?.email}
-                        <span class="uploader-email">{data.sessionUser.email}</span>
-                    {/if}
-                </div>
-            </div>
-            {#if !data.uploader}
-                <p class="warning">
-                    We couldn&apos;t link your account to a creator profile. Please contact support before uploading.
-                </p>
-            {/if}
-        </div>
-
-        <!-- Upload Date -->
-        <div class="form-group">
-            <label for="uploadDate" class="label">Upload Date</label>
-            <input
-                id="uploadDate"
-                name="uploadedAt"
-                type="date"
-                class="input"
-                bind:value={uploadDate}
-            />
-            <p class="hint">
-                Automatically detected from video metadata when available
-            </p>
-        </div>
-
-        <!-- Location Status -->
-        {#if locationStatus}
-            <div class="form-group">
-                {#if locationStatus === "detecting"}
-                    <div class="location-status detecting">
-                        <div class="spinner-small"></div>
-                        <span>Detecting location from video metadata...</span>
-                    </div>
-                {:else if locationStatus === "found"}
-                    <div class="location-status found">
-                        <svg
-                            width="20"
-                            height="20"
-                            viewBox="0 0 20 20"
-                            fill="none"
-                        >
+                <label for="video-file" class="label">Video File *</label>
+                <div class="file-input-wrapper">
+                    <label class="file-picker" class:has-file={videoFile}>
+                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
                             <path
-                                d="M10 2C7.24 2 5 4.24 5 7c0 3.75 5 11 5 11s5-7.25 5-11c0-2.76-2.24-5-5-5zm0 7c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"
-                                fill="currentColor"
-                            />
-                        </svg>
-                        <span
-                            >Location found: {latitude?.toFixed(6)}, {longitude?.toFixed(
-                                6,
-                            )}</span
-                        >
-                    </div>
-                {:else if locationStatus === "not-found"}
-                    <div class="location-status not-found">
-                        <svg
-                            width="20"
-                            height="20"
-                            viewBox="0 0 20 20"
-                            fill="none"
-                        >
-                            <circle
-                                cx="10"
-                                cy="10"
-                                r="8"
-                                stroke="currentColor"
-                                stroke-width="2"
-                            />
-                            <path
-                                d="M10 6v4M10 14h.01"
+                                d="M21 15V19C21 19.5304 20.7893 20.0391 20.4142 20.4142C20.0391 20.7893 19.5304 21 19 21H5C4.46957 21 3.96086 20.7893 3.58579 20.4142C3.21071 20.0391 3 19.5304 3 19V15"
                                 stroke="currentColor"
                                 stroke-width="2"
                                 stroke-linecap="round"
+                                stroke-linejoin="round"
+                            />
+                            <path
+                                d="M17 8L12 3L7 8"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                            />
+                            <path
+                                d="M12 3V15"
+                                stroke="currentColor"
+                                stroke-width="2"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
                             />
                         </svg>
                         <span
-                            >No location found in video metadata. You can set it
-                            manually below.</span
+                            >{videoFile
+                                ? videoFile.name
+                                : "Choose a video file"}</span
                         >
-                    </div>
-                {/if}
-            </div>
-        {/if}
-
-        <!-- Description -->
-        <div class="form-group">
-            <label for="description" class="label">
-                Description *
-                <span class="word-counter" class:over-limit={wordCount > 300}>
-                    {wordCount} / 300 words
-                </span>
-            </label>
-            <textarea
-                id="description"
-                name="description"
-                class="textarea"
-                bind:value={description}
-                placeholder="Describe your video... (max 300 words)"
-                required
-                rows="6"
-            ></textarea>
-        </div>
-
-        <!-- Thumbnail Picker -->
-        {#if thumbnails.length > 0}
-            <div class="form-group">
-                <fieldset>
-                    <legend class="label">Select Thumbnail</legend>
-                    <div class="thumbnail-grid">
-                        {#each thumbnails as thumb, i}
-                            <button
-                                type="button"
-                                class="thumbnail-option"
-                                class:selected={selectedThumbnail === thumb}
-                                onclick={() => selectThumbnail(thumb)}
-                                aria-label={`Select Thumbnail ${i+1}`}
+                        <input
+                            id="video-file"
+                            type="file"
+                            accept="video/*"
+                            onchange={handleFileSelect}
+                            name="localVideoFile"
+                        />
+                    </label>
+                    {#if videoFile}
+                        <div class="file-info">
+                            <span class="file-size"
+                                >{(videoFile.size / 1024 / 1024).toFixed(2)} MB</span
                             >
-                                <img src={thumb} alt="Thumbnail {i + 1}" />
-                                {#if selectedThumbnail === thumb}
-                                    <div class="selected-indicator">
-                                        <svg
-                                            width="24"
-                                            height="24"
-                                            viewBox="0 0 24 24"
-                                            fill="none"
-                                        >
-                                            <circle
-                                                cx="12"
-                                                cy="12"
-                                                r="10"
-                                                fill="currentColor"
-                                            />
-                                            <path
-                                                d="M8 12L11 15L16 9"
-                                                stroke="white"
-                                                stroke-width="2"
-                                                stroke-linecap="round"
-                                                stroke-linejoin="round"
-                                            />
-                                        </svg>
-                                    </div>
-                                {/if}
-                            </button>
-                        {/each}
+                            {#if duration > 0}
+                                <span class="file-duration"
+                                    >{Math.floor(duration / 60)}:{(duration % 60)
+                                        .toString()
+                                        .padStart(2, "0")}</span
+                                >
+                            {/if}
+                        </div>
+                    {/if}
+                </div>
+                {#if isProcessing}
+                    <div class="processing-status">
+                        <div class="spinner"></div>
+                        <span>{processingStatus}</span>
                     </div>
-                </fieldset>
+                {/if}
+            </div>
+
+            <!-- Video Preview -->
+            {#if videoPreviewUrl && !isProcessing}
+                <div class="form-group">
+                    <label class="label" for="video-preview">Preview</label>
+                    <video id="video-preview" class="video-preview" src={videoPreviewUrl} controls>
+                        <track kind="captions" label="No captions" />
+                    </video>
+                </div>
+            {/if}
+
+            <!-- Title -->
+            <div class="form-group">
+                <label for="title" class="label">Title *</label>
+                <input
+                    id="title"
+                    name="title"
+                    type="text"
+                    class="input"
+                    bind:value={title}
+                    placeholder="Enter video title"
+                    required
+                    maxlength="200"
+                />
+            </div>
+
+            <!-- Uploader -->
+            <div class="form-group">
+                <label class="label" for="uploader-pill">Uploading as</label>
+                <div id="uploader-pill" class="uploader-pill">
+                    <span class="uploader-avatar">{uploaderDisplayName.slice(0, 1).toUpperCase()}</span>
+                    <div class="uploader-details">
+                        <span class="uploader-name">{uploaderDisplayName}</span>
+                        {#if data.sessionUser?.email}
+                            <span class="uploader-email">{data.sessionUser.email}</span>
+                        {/if}
+                    </div>
+                </div>
+                {#if !data.uploader}
+                    <p class="warning">
+                        We couldn&apos;t link your account to a creator profile. Please contact support before uploading.
+                    </p>
+                {/if}
+            </div>
+
+            <!-- Upload Date -->
+            <div class="form-group">
+                <label for="uploadDate" class="label">Upload Date</label>
+                <input
+                    id="uploadDate"
+                    name="uploadedAt"
+                    type="date"
+                    class="input"
+                    bind:value={uploadDate}
+                />
+                <p class="hint">
+                    Automatically detected from video metadata when available
+                </p>
+            </div>
+
+            <!-- Location Status -->
+            {#if locationStatus}
+                <div class="form-group">
+                    {#if locationStatus === "detecting"}
+                        <div class="location-status detecting visually-hidden">
+                            <div class="spinner-small"></div>
+                            <span>Detecting location from video metadata...</span>
+                        </div>
+                    {:else if locationStatus === "found"}
+                        <div class="location-status found visually-hidden">
+                            <svg
+                                width="20"
+                                height="20"
+                                viewBox="0 0 20 20"
+                                fill="none"
+                            >
+                                <path
+                                    d="M10 2C7.24 2 5 4.24 5 7c0 3.75 5 11 5 11s5-7.25 5-11c0-2.76-2.24-5-5-5zm0 7c-1.1 0-2-.9-2-2s.9-2 2-2 2 .9 2 2-.9 2-2 2z"
+                                    fill="currentColor"
+                                />
+                            </svg>
+                            <span
+                                >Location found: {latitude?.toFixed(6)}, {longitude?.toFixed(
+                                    6,
+                                )}</span
+                            >
+                        </div>
+                    {:else if locationStatus === "not-found"}
+                        <div class="location-status not-found visually-hidden">
+                            <svg
+                                width="20"
+                                height="20"
+                                viewBox="0 0 20 20"
+                                fill="none"
+                            >
+                                <circle cx="10" cy="10" r="8" stroke="currentColor" stroke-width="2" />
+                                <path
+                                    d="M10 6v4M10 14h.01"
+                                    stroke="currentColor"
+                                    stroke-width="2"
+                                    stroke-linecap="round"
+                                />
+                            </svg>
+                            <span>
+                                No location found in video metadata. You can set it manually below.
+                            </span>
+                        </div>
+                    {/if}
+                </div>
+            {/if}
+
+            <!-- Description -->
+            <div class="form-group">
+                <label for="description" class="label">
+                    Description *
+                    <span class="word-counter" class:over-limit={wordCount > 300}>
+                        {wordCount} / 300 words
+                    </span>
+                </label>
+                <textarea
+                    id="description"
+                    name="description"
+                    class="textarea"
+                    bind:value={description}
+                    placeholder="Describe your video... (max 300 words)"
+                    required
+                    rows="6"
+                ></textarea>
+            </div>
+
+            <!-- Thumbnail Picker -->
+            {#if thumbnails.length > 0}
+                <div class="form-group">
+                    <fieldset>
+                        <legend class="label">Select Thumbnail</legend>
+                        <div class="thumbnail-grid">
+                            {#each thumbnails as thumb, i}
+                                <button
+                                    type="button"
+                                    class="thumbnail-option"
+                                    class:selected={selectedThumbnail === thumb}
+                                    onclick={() => selectThumbnail(thumb)}
+                                    aria-label={`Select Thumbnail ${i+1}`}
+                                >
+                                    <img src={thumb} alt="Thumbnail {i + 1}" />
+                                    {#if selectedThumbnail === thumb}
+                                        <div class="selected-indicator">
+                                            <svg
+                                                width="24"
+                                                height="24"
+                                                viewBox="0 0 24 24"
+                                                fill="none"
+                                            >
+                                                <circle
+                                                    cx="12"
+                                                    cy="12"
+                                                    r="10"
+                                                    fill="currentColor"
+                                                />
+                                                <path
+                                                    d="M8 12L11 15L16 9"
+                                                    stroke="white"
+                                                    stroke-width="2"
+                                                    stroke-linecap="round"
+                                                    stroke-linejoin="round"
+                                                />
+                                            </svg>
+                                        </div>
+                                    {/if}
+                                </button>
+                            {/each}
+                        </div>
+                    </fieldset>
+                </div>
+            {/if}
+
+            <!-- Location Picker -->
+            <div class="form-group">
+                <label class="label" for="location-map">
+                    Location
+                    {#if latitude && longitude}
+                        <span class="location-detected">📍 Location set</span>
+                    {/if}
+                </label>
+                <p class="hint">
+                    Click on the map to set the video location. Use the geolocation
+                    button to use your current location.
+                </p>
+                <LocationPicker
+                    {latitude}
+                    {longitude}
+                    onLocationChange={handleLocationChange}
+                />
+            </div>
+
+            <!-- Hidden fields for submission -->
+            <input type="hidden" name="latitude" value={latitude ?? ""} />
+            <input type="hidden" name="longitude" value={longitude ?? ""} />
+            <input type="hidden" name="videoUrl" value={videoUrl} />
+            <input type="hidden" name="thumbnailUrl" value={selectedThumbnail} />
+            <input type="hidden" name="duration" value={duration} />
+            <input type="hidden" name="bunnyVideoId" value={bunnyVideoId} />
+
+            <!-- Submit Button -->
+            <div class="form-actions">
+                <button type="submit" class="submit-btn" disabled={submitDisabled}>
+                    {#if isSubmitting}
+                        <div class="spinner"></div>
+                        <span>Uploading...</span>
+                    {:else if isProcessing}
+                        <span>Processing video...</span>
+                    {:else if uploadStatus === "uploading" || uploadStatus === "creating"}
+                        <span>Uploading video...</span>
+                    {:else}
+                        <span>Save Video</span>
+                    {/if}
+                </button>
             </div>
         {/if}
-
-        <!-- Location Picker -->
-        <div class="form-group">
-            <label class="label" for="location-map">
-                Location
-                {#if latitude && longitude}
-                    <span class="location-detected">📍 Location set</span>
-                {/if}
-            </label>
-            <p class="hint">
-                Click on the map to set the video location. Use the geolocation
-                button to use your current location.
-            </p>
-            <LocationPicker
-                {latitude}
-                {longitude}
-                onLocationChange={handleLocationChange}
-            />
-        </div>
-
-        <!-- Hidden fields for submission -->
-        <input type="hidden" name="latitude" value={latitude ?? ""} />
-        <input type="hidden" name="longitude" value={longitude ?? ""} />
-        <input type="hidden" name="videoUrl" value={videoUrl} />
-        <input type="hidden" name="thumbnailUrl" value={selectedThumbnail} />
-        <input type="hidden" name="duration" value={duration} />
-        <input type="hidden" name="bunnyVideoId" value={bunnyVideoId} />
-
-        <!-- Submit Button -->
-        <div class="form-actions">
-            <button type="submit" class="submit-btn" disabled={submitDisabled}>
-                {#if isSubmitting}
-                    <div class="spinner"></div>
-                    <span>Uploading...</span>
-                {:else if isProcessing}
-                    <span>Processing video...</span>
-                {:else if !uploadCompleted}
-                    <span>Finish Video Upload</span>
-                {:else}
-                    <span>Save Video</span>
-                {/if}
-            </button>
-        </div>
     </form>
 </div>
 
@@ -1338,6 +1395,8 @@
         opacity: 0.5;
         cursor: not-allowed;
     }
+
+    .visually-hidden { display: none !important; }
 
     @media (max-width: 640px) {
         .page {

@@ -190,3 +190,21 @@ export async function getVideosByUserId(db: DrizzleDb, userId: number): Promise<
 		return mapped;
 	});
 }
+
+export async function updateVideo(
+	db: DrizzleDb,
+	id: string,
+	updates: {
+		title?: string;
+		description?: string;
+		latitude?: number | null;
+		longitude?: number | null;
+		thumbnailUrl?: string | null;
+	}
+): Promise<void> {
+	await db
+		.update(videos)
+		.set(updates)
+		.where(eq(videos.id, id))
+		.execute();
+}

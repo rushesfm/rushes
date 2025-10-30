@@ -1,13 +1,15 @@
 <script lang="ts">
 	import type { ActionData, PageData } from './$types';
-	import { onMount } from 'svelte';
+	import { getContext, onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import VideoPlayer from '$lib/components/VideoPlayer.svelte';
+	import type { BreadcrumbItem } from '$lib/types/navigation';
 
-	export let data: PageData;
-	export let form: ActionData;
+	const props = $props<{ data: PageData; form: ActionData }>();
+	const data = $derived(() => props.data);
+	const form = $derived(() => props.form);
 
-	let activeTab: 'login' | 'signup' = 'login';
+	let activeTab = $state<'login' | 'signup'>('login');
 
 	type LoginFormState =
 		| undefined
@@ -34,35 +36,42 @@
 				message: string;
 		  };
 
-	const inviteRequired = data.inviteRequired;
-	const redirectTo = data.redirectTo ?? '/';
-	const sessionUser = data.sessionUser;
-	const isAuthenticated = Boolean(sessionUser);
+	const inviteRequired = $derived(() => data.inviteRequired);
+	const redirectTo = $derived(() => data.redirectTo ?? '/');
+	const sessionUser = $derived(() => data.sessionUser);
+	const isAuthenticated = $derived(() => Boolean(sessionUser));
+	const totalUserVideos = $derived(() => (Array.isArray(data.userVideos) ? data.userVideos.length : (data.totalUserVideos ?? 0)));
+	const recentVideos = $derived(() => (Array.isArray(data.userVideos) ? data.userVideos.slice(0, 3) : (data.recentVideos ?? [])));
 
-	let loginState: LoginFormState = form?.login as LoginFormState;
-	let signupState: SignupFormState = form?.signup as SignupFormState;
-	let logoutState: LogoutFormState = form?.logout as LogoutFormState;
-	let signupFields = signupState?.fields ?? { name: '', email: '' };
-	let signupWasSuccessful = !isAuthenticated
-		? Boolean(signupState && 'success' in signupState && signupState.success)
-		: false;
+	const loginState = $derived(() => form?.login as LoginFormState);
+	const signupState = $derived(() => form?.signup as SignupFormState);
+	const logoutState = $derived(() => form?.logout as LogoutFormState);
+	const signupFields = $derived(() => signupState?.fields ?? { name: '', email: '' });
+	const signupWasSuccessful = $derived(() =>
+		!isAuthenticated ? Boolean(signupState && 'success' in signupState && signupState.success) : false
+	);
 
-	let totalUserVideos = Array.isArray(data.userVideos) ? data.userVideos.length : 0;
-	let recentVideos = Array.isArray(data.userVideos) ? data.userVideos.slice(0, 3) : [];
+	const customBreadcrumbs: BreadcrumbItem[] = [
+		{ href: '/', label: 'Home' },
+		{ href: '/account', label: 'My Account' }
+	];
 
-	$: loginState = form?.login as LoginFormState;
-	$: signupState = form?.signup as SignupFormState;
-	$: logoutState = form?.logout as LogoutFormState;
-	$: signupFields = signupState?.fields ?? { name: '', email: '' };
-	$: signupWasSuccessful = !isAuthenticated
-		? Boolean(signupState && 'success' in signupState && signupState.success)
-		: false;
-	$: totalUserVideos = Array.isArray(data.userVideos) ? data.userVideos.length : 0;
-	$: recentVideos = Array.isArray(data.userVideos) ? data.userVideos.slice(0, 3) : [];
+	const breadcrumbsContext = getContext<{ set: (items: BreadcrumbItem[]) => void; clear: () => void }>(
+		'breadcrumbs'
+	);
 
-	$: if (!isAuthenticated && signupWasSuccessful) {
-		activeTab = 'login';
-	}
+	$effect(() => {
+		if (breadcrumbsContext) {
+			breadcrumbsContext.set(customBreadcrumbs);
+			return () => breadcrumbsContext.clear();
+		}
+	});
+
+	$effect(() => {
+		if (!isAuthenticated && signupWasSuccessful) {
+			activeTab = 'login';
+		}
+	});
 
 	onMount(() => {
 		if (typeof window !== 'undefined' && window.location.hash === '#signup') {

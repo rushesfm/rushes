@@ -1,15 +1,13 @@
 <script lang="ts">
 	import type { ActionData, PageData } from './$types';
-	import { getContext, onMount } from 'svelte';
+	import { onMount } from 'svelte';
 	import { goto } from '$app/navigation';
 	import VideoPlayer from '$lib/components/VideoPlayer.svelte';
-	import type { BreadcrumbItem } from '$lib/types/navigation';
 
-	const props = $props<{ data: PageData; form: ActionData }>();
-	const data = $derived(() => props.data);
-	const form = $derived(() => props.form);
+	export let data: PageData;
+	export let form: ActionData;
 
-	let activeTab = $state<'login' | 'signup'>('login');
+	let activeTab: 'login' | 'signup' = 'login';
 
 	type LoginFormState =
 		| undefined
@@ -36,42 +34,35 @@
 				message: string;
 		  };
 
-	const inviteRequired = $derived(() => data.inviteRequired);
-	const redirectTo = $derived(() => data.redirectTo ?? '/');
-	const sessionUser = $derived(() => data.sessionUser);
-	const isAuthenticated = $derived(() => Boolean(sessionUser));
-	const totalUserVideos = $derived(() => data.totalUserVideos ?? 0);
+	const inviteRequired = data.inviteRequired;
+	const redirectTo = data.redirectTo ?? '/';
+	const sessionUser = data.sessionUser;
+	const isAuthenticated = Boolean(sessionUser);
 
-	const loginState = $derived(() => form?.login as LoginFormState);
-	const signupState = $derived(() => form?.signup as SignupFormState);
-	const logoutState = $derived(() => form?.logout as LogoutFormState);
-	const signupFields = $derived(() => signupState?.fields ?? { name: '', email: '' });
-	const signupWasSuccessful = $derived(() =>
-		!isAuthenticated ? Boolean(signupState && 'success' in signupState && signupState.success) : false
-	);
-	const recentVideos = $derived(() => data.recentVideos ?? []);
+	let loginState: LoginFormState = form?.login as LoginFormState;
+	let signupState: SignupFormState = form?.signup as SignupFormState;
+	let logoutState: LogoutFormState = form?.logout as LogoutFormState;
+	let signupFields = signupState?.fields ?? { name: '', email: '' };
+	let signupWasSuccessful = !isAuthenticated
+		? Boolean(signupState && 'success' in signupState && signupState.success)
+		: false;
 
-	const customBreadcrumbs: BreadcrumbItem[] = [
-		{ href: '/', label: 'Home' },
-		{ href: '/account', label: 'My Account' }
-	];
+	let totalUserVideos = Array.isArray(data.userVideos) ? data.userVideos.length : 0;
+	let recentVideos = Array.isArray(data.userVideos) ? data.userVideos.slice(0, 3) : [];
 
-	const breadcrumbsContext = getContext<{ set: (items: BreadcrumbItem[]) => void; clear: () => void }>(
-		'breadcrumbs'
-	);
+	$: loginState = form?.login as LoginFormState;
+	$: signupState = form?.signup as SignupFormState;
+	$: logoutState = form?.logout as LogoutFormState;
+	$: signupFields = signupState?.fields ?? { name: '', email: '' };
+	$: signupWasSuccessful = !isAuthenticated
+		? Boolean(signupState && 'success' in signupState && signupState.success)
+		: false;
+	$: totalUserVideos = Array.isArray(data.userVideos) ? data.userVideos.length : 0;
+	$: recentVideos = Array.isArray(data.userVideos) ? data.userVideos.slice(0, 3) : [];
 
-	$effect(() => {
-		if (breadcrumbsContext) {
-			breadcrumbsContext.set(customBreadcrumbs);
-			return () => breadcrumbsContext.clear();
-		}
-	});
-
-	$effect(() => {
-		if (!isAuthenticated && signupWasSuccessful) {
-			activeTab = 'login';
-		}
-	});
+	$: if (!isAuthenticated && signupWasSuccessful) {
+		activeTab = 'login';
+	}
 
 	onMount(() => {
 		if (typeof window !== 'undefined' && window.location.hash === '#signup') {
@@ -147,7 +138,7 @@
 							<button
 								type="button"
 								class="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-white/90 focus:outline-none focus:ring-2 focus:ring-white/40"
-								onclick={() => goto('/account/upload')}
+								on:click={() => goto('/account/upload')}
 							>
 								Upload a video
 							</button>
@@ -183,18 +174,18 @@
 				</header>
 				<div
 					class="flex flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed border-white/20 bg-neutral-900/40 p-8 text-center text-white/70 transition hover:border-white/30 hover:bg-neutral-900/30"
-					ondragover={e => { e.preventDefault(); e.stopPropagation(); }}
-					ondrop={onDrop}
+					on:dragover={e => { e.preventDefault(); e.stopPropagation(); }}
+					on:drop={onDrop}
 				>
 					<label class="cursor-pointer text-lg font-medium">
 						Drop a video or <span class="underline text-orange-400 hover:text-orange-300">browse</span>
-						<input type="file" accept="video/*" class="hidden" onchange={onFileSelect} />
+						<input type="file" accept="video/*" class="hidden" on:change={onFileSelect} />
 					</label>
 					<p class="text-sm text-white/50">Nothing uploads until you confirm details on the next step.</p>
 					<button
 						type="button"
 						class="rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-teal-200 transition hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-white/30"
-						onclick={() => goto('/account/upload')}
+						on:click={() => goto('/account/upload')}
 					>
 						Open uploader
 					</button>
@@ -300,7 +291,7 @@
 					'login'
 						? 'border-white text-white'
 						: 'border-transparent text-white/60 hover:text-white'}"
-          onclick={() => (activeTab = 'login')}
+          on:click={() => (activeTab = 'login')}
 					type="button"
 				>
 					Sign in
@@ -310,7 +301,7 @@
 					'signup'
 						? 'border-white text-white'
 						: 'border-transparent text-white/60 hover:text-white'}"
-          onclick={() => (activeTab = 'signup')}
+          on:click={() => (activeTab = 'signup')}
 					type="button"
 				>
 					Create account

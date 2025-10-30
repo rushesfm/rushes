@@ -8,7 +8,6 @@
     import Sidebar from "$lib/components/Sidebar.svelte";
     import PersistentVideoPlayer from "$lib/components/PersistentVideoPlayer.svelte";
     import { page } from "$app/stores";
-    import { afterNavigate } from "$app/navigation";
     import Playing from "$lib/components/Playing.svelte";
     import { selectedVideo } from "$lib/stores/selectedVideo";
     import MuxVideoPlayer from "$lib/components/MuxVideoPlayer.svelte";
@@ -238,10 +237,6 @@
     };
 
     setContext("breadcrumbs", breadcrumbController);
-
-    afterNavigate(() => {
-        breadcrumbOverride = null;
-    });
 
     const layoutBreadcrumbs = $derived(() => breadcrumbOverride ?? undefined);
 </script>

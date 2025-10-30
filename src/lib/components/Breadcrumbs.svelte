@@ -98,8 +98,14 @@
 <style>
     .breadcrumbs {
         padding: 0.75rem 1rem;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-        background: rgba(255, 255, 255, 0.02);
+        border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        background: linear-gradient(
+            135deg,
+            rgba(15, 23, 42, 0.85),
+            rgba(30, 41, 59, 0.75)
+        );
+        backdrop-filter: blur(8px);
+        color: rgba(255, 255, 255, 0.85);
     }
 
     .breadcrumbs-list {
@@ -120,22 +126,22 @@
     }
 
     .breadcrumbs-link {
-        color: rgba(255, 255, 255, 0.6);
+        color: rgba(255, 255, 255, 0.75);
         text-decoration: none;
         transition: color 0.2s ease;
     }
 
     .breadcrumbs-link:hover {
-        color: rgba(94, 234, 212, 0.8);
+        color: rgba(94, 234, 212, 1);
     }
 
     .breadcrumbs-current {
-        color: white;
-        font-weight: 500;
+        color: #fff;
+        font-weight: 600;
     }
 
     .breadcrumbs-separator {
-        color: rgba(255, 255, 255, 0.3);
+        color: rgba(148, 163, 184, 0.8);
         user-select: none;
     }
 </style>

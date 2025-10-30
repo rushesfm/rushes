@@ -1,7 +1,10 @@
 <script lang="ts">
   import type { PageData } from './$types';
+  import { getContext, onDestroy } from 'svelte';
+  import type { BreadcrumbItem } from '$lib/types/navigation';
+
   export let data: PageData;
-  // Add editing state/logic as needed for metadata
+
   function startEditing(video) { /* NOOP for now */ }
   function formatDateTime(value?: string | Date | null): string {
     if (!value) return '';
@@ -15,6 +18,22 @@
       return typeof value === 'string' ? value : '';
     }
   }
+
+  const customBreadcrumbs: BreadcrumbItem[] = [
+    { href: '/', label: 'Home' },
+    { href: '/account', label: 'My Account' },
+    { href: '/account/uploads', label: 'My Uploads' }
+  ];
+
+  const breadcrumbsContext = getContext<{ set: (items: BreadcrumbItem[]) => void; clear: () => void }>('breadcrumbs');
+
+  if (breadcrumbsContext) {
+    breadcrumbsContext.set(customBreadcrumbs);
+  }
+
+  onDestroy(() => {
+    breadcrumbsContext?.clear?.();
+  });
 </script>
 
 <div class="min-h-screen p-8 bg-black/80">

@@ -1,4 +1,4 @@
-// src/routes/account/upload/+page.server.ts
+// src/routes/account/new/+page.server.ts
 
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
@@ -109,7 +109,7 @@ export const actions: Actions = {
 		const wordCount = description.trim().split(/\s+/).length;
 		if (wordCount > 300) {
 			return fail(400, {
-				error: `Description must be 300 words or less (currently ${wordCount} words)`,
+				error: `Description must be 300 words or less (currently ${wordCount} words)` ,
 				field: 'description'
 			});
 		}

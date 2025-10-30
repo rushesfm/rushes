@@ -6,6 +6,7 @@
     import { goto } from "$app/navigation";
     import { onDestroy } from "svelte";
     import { Upload } from "tus-js-client";
+    import BreadcrumbBar from "$lib/components/BreadcrumbBar.svelte";
 
     interface Props {
         data: PageData;
@@ -115,7 +116,7 @@
                 : videoFile.name.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
 
         try {
-            const response = await fetch("/account/upload/tus", {
+            const response = await fetch("/account/new/tus", {
                 method: "POST",
                 headers: {
                     "Content-Type": "application/json",
@@ -270,7 +271,7 @@
                     locationStatus = "not-found";
                 }
             };
-            // When on /account/upload, check for a preset file (from drag on /account)
+    // When on /account/new, check for a preset file (from drag on /account)
             if ((window as any).__rushesUploadFile) {
                 const presetFile = (window as any).__rushesUploadFile as File;
                 delete (window as any).__rushesUploadFile;
@@ -468,6 +469,12 @@
 </svelte:head>
 
 <div class="page">
+    <BreadcrumbBar items={[{
+        "label": "My Account",
+        "href": "/account"
+    }, {
+        "label": "New Upload"
+    }]} />
     <form
         method="POST"
         action="?/upload"
@@ -856,21 +863,13 @@
 <style>
     .page {
         height: 100vh;
-        padding: 4rem 1.5rem;
-        background:
-            radial-gradient(
-                circle at top,
-                rgba(8, 47, 73, 0.4),
-                transparent 55%
-            ),
-            rgba(2, 6, 23, 0.94);
-        display: flex;
-        align-items: flex-start;
-        justify-content: center;
+        padding: 1.5rem 5rem;
+       
+      
     }
 
     .card {
-        width: min(800px, 100%);
+        width: 100%;
         background: rgba(15, 23, 42, 0.9);
         border: 1px solid rgba(148, 163, 184, 0.2);
         border-radius: 20px;

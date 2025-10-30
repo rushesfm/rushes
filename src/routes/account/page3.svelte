@@ -1,9 +1,8 @@
 <script lang="ts">
-	import type { ActionData, PageData } from './$types';
-	import { getContext, onMount } from 'svelte';
-	import { goto } from '$app/navigation';
-	import VideoPlayer from '$lib/components/VideoPlayer.svelte';
-	import type { BreadcrumbItem } from '$lib/types/navigation';
+import type { ActionData, PageData } from './$types';
+import { onMount } from 'svelte';
+import { goto } from '$app/navigation';
+import VideoPlayer from '$lib/components/VideoPlayer.svelte';
 
 	const props = $props<{ data: PageData; form: ActionData }>();
 	const data = $derived(() => props.data);
@@ -51,25 +50,9 @@
 		!isAuthenticated ? Boolean(signupState && 'success' in signupState && signupState.success) : false
 	);
 
-	const customBreadcrumbs: BreadcrumbItem[] = [
-		{ href: '/', label: 'Home' },
-		{ href: '/account', label: 'My Account' }
-	];
-
-	const breadcrumbsContext = getContext<{ set: (items: BreadcrumbItem[]) => void; clear: () => void }>(
-		'breadcrumbs'
-	);
-
-	$effect(() => {
-		if (breadcrumbsContext) {
-			breadcrumbsContext.set(customBreadcrumbs);
-			return () => breadcrumbsContext.clear();
-		}
-	});
-
-	$effect(() => {
-		if (!isAuthenticated && signupWasSuccessful) {
-			activeTab = 'login';
+$effect(() => {
+    if (!isAuthenticated && signupWasSuccessful) {
+        activeTab = 'login';
 		}
 	});
 
@@ -93,7 +76,7 @@
 
 	function queueUpload(file: File) {
 		(window as any).__rushesUploadFile = file;
-		goto('/account/upload');
+		goto('/account/new');
 	}
 
 	function formatDateTime(value?: string | Date | null) {
@@ -147,7 +130,7 @@
 							<button
 								type="button"
 								class="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-white/90 focus:outline-none focus:ring-2 focus:ring-white/40"
-								on:click={() => goto('/account/upload')}
+								on:click={() => goto('/account/new')}
 							>
 								Upload a video
 							</button>
@@ -194,7 +177,7 @@
 					<button
 						type="button"
 						class="rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-teal-200 transition hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-white/30"
-						on:click={() => goto('/account/upload')}
+						on:click={() => goto('/account/new')}
 					>
 						Open uploader
 					</button>

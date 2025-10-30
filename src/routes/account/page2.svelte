@@ -84,7 +84,7 @@
 
 	function queueUpload(file: File) {
 		(window as any).__rushesUploadFile = file;
-		goto('/account/upload');
+		goto('/account/new');
 	}
 
 	function formatDateTime(value?: string | Date | null) {
@@ -138,7 +138,7 @@
 							<button
 								type="button"
 								class="rounded-lg bg-white px-4 py-2 text-sm font-semibold text-black transition hover:bg-white/90 focus:outline-none focus:ring-2 focus:ring-white/40"
-								on:click={() => goto('/account/upload')}
+								on:click={() => goto('/account/new')}
 							>
 								Upload a video
 							</button>
@@ -185,7 +185,7 @@
 					<button
 						type="button"
 						class="rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-teal-200 transition hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-white/30"
-						on:click={() => goto('/account/upload')}
+						on:click={() => goto('/account/new')}
 					>
 						Open uploader
 					</button>

@@ -1,12 +1,13 @@
 <script lang="ts">
   import type { PageData } from './$types';
-  import { getContext, onDestroy } from 'svelte';
-  import Breadcrumbs from '$lib/components/Breadcrumbs.svelte';
-  import type { BreadcrumbItem } from '$lib/types/navigation';
+  import BreadcrumbBar, { type BreadcrumbEntry } from '$lib/components/BreadcrumbBar.svelte';
+  import { goto } from '$app/navigation';
 
   export let data: PageData;
 
-  function startEditing(video) { /* NOOP for now */ }
+  function startEditing(video) {
+    goto(`/account/new?videoId=${video.id}`);
+  }
   function formatDateTime(value?: string | Date | null): string {
     if (!value) return '';
     try {
@@ -20,30 +21,16 @@
     }
   }
 
-  const customBreadcrumbs: BreadcrumbItem[] = [
-    { href: '/', label: 'Home' },
-    { href: '/account', label: 'My Account' },
-    { href: '/account/uploads', label: 'My Uploads' }
+  const breadcrumbItems: BreadcrumbEntry[] = [
+    { label: 'My Account', href: '/account' },
+    { label: 'My Uploads' }
   ];
 
-  const breadcrumbsContext = getContext<{
-    set: (items: BreadcrumbItem[]) => void;
-    setInline: (items: BreadcrumbItem[]) => void;
-    clear: () => void;
-  }>('breadcrumbs');
-
-  if (breadcrumbsContext) {
-    breadcrumbsContext.setInline(customBreadcrumbs);
-  }
-
-  onDestroy(() => {
-    breadcrumbsContext?.clear?.();
-  });
 </script>
 
 <div class="min-h-screen p-8 bg-black/80">
   <div class="mx-auto w-full max-w-6xl">
-    <Breadcrumbs items={customBreadcrumbs} />
+    <BreadcrumbBar items={breadcrumbItems} />
     <header class="mb-8 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
       <h1 class="text-3xl font-bold text-white">Your Uploads</h1>
       <a href="/account" class="text-sm rounded px-3 py-2 border border-white/10 text-white/70 hover:bg-white/10 transition">← Back to Account</a>

@@ -32,12 +32,14 @@
 
 <style>
   .breadcrumb-bar {
+    width: 95%; 
+    margin: 0 auto;
     margin-bottom: 2rem;
     border-radius: 0.75rem;
-    border: 1px solid rgba(255, 255, 255, 0.12);
-    background: linear-gradient(135deg, rgba(15, 23, 42, 0.65), rgba(30, 41, 59, 0.55));
-    backdrop-filter: blur(12px);
-    box-shadow: 0 10px 30px rgba(15, 23, 42, 0.25);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: black;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
   }
 
   .breadcrumb-list {
@@ -55,7 +57,7 @@
     align-items: center;
     gap: 0.5rem;
     font-size: 0.9rem;
-    color: rgba(255, 255, 255, 0.8);
+    color: rgba(255, 255, 255, 0.6);
   }
 
   .breadcrumb-link {
@@ -63,28 +65,28 @@
     align-items: center;
     gap: 0.4rem;
     border-radius: 9999px;
-    border: 1px solid rgba(255, 255, 255, 0.2);
-    background: rgba(255, 255, 255, 0.08);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: transparent;
     padding: 0.35rem 0.9rem;
-    color: rgba(255, 255, 255, 0.9);
-    font-weight: 600;
+    color: rgba(255, 255, 255, 0.7);
+    font-weight: 500;
     text-decoration: none;
     transition: border-color 120ms ease, background 120ms ease, color 120ms ease;
   }
 
   .breadcrumb-link:hover {
-    border-color: rgba(255, 255, 255, 0.35);
-    background: rgba(255, 255, 255, 0.15);
-    color: #fff;
+    border-color: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.05);
+    color: rgba(255, 255, 255, 0.85);
   }
 
   .breadcrumb-current {
-    color: #fff;
-    font-weight: 700;
+    color: rgba(255, 255, 255, 0.8);
+    font-weight: 600;
   }
 
   .breadcrumb-chevron {
-    color: rgba(226, 232, 240, 0.6);
+    color: rgba(255, 255, 255, 0.4);
     font-size: 1rem;
   }
 

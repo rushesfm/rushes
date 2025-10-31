@@ -1237,6 +1237,7 @@ function deriveThumbnailUrlFromStreamUrl(streamUrl: string): string {
         min-height: 100vh;
         background: rgba(0, 0, 0, 0.9);
         padding: 2rem;
+       
         position: relative;
         overflow: hidden;
     }
@@ -1250,7 +1251,7 @@ function deriveThumbnailUrlFromStreamUrl(streamUrl: string): string {
         width: 100%;
         height: 500px;
         background-image: var(--preview-bg-url, none);
-        background-size: 100%;
+        background-size: 120%;
         background-position: top;
         background-repeat: no-repeat;
         opacity: 0.1;
@@ -1267,6 +1268,8 @@ function deriveThumbnailUrlFromStreamUrl(streamUrl: string): string {
 
     .header {
         display: flex;
+        padding-top: 100px;
+        padding-bottom: 100px;
         justify-content: space-between;
         align-items: center;
         margin-bottom: 2rem;

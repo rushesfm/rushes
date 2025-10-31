@@ -98,6 +98,23 @@
     let replaceFormat = $state<string | null>(null);
     let replaceAspectRatio = $state<string | null>(null);
     let downloadUrl = $state(data.data?.downloadUrl ?? '');
+    
+    // Build preview animation URL
+    function buildPreviewUrl(): string | null {
+        if (!streamId) return null;
+        // Extract CDN hostname from videoUrl or downloadUrl
+        const url = videoUrl || downloadUrl || '';
+        const match = url.match(/https?:\/\/([^\/]+)/);
+        if (match && match[1]) {
+            const cdnHost = match[1];
+            // Build preview URL: https://cdn-host/streamId/preview.webp?v=timestamp
+            const timestamp = Date.now();
+            return `https://${cdnHost}/${streamId}/preview.webp?v=${timestamp}`;
+        }
+        return null;
+    }
+    
+    let previewUrl = $derived(buildPreviewUrl());
 
     function handleLocationChange(lat: number, lon: number) {
         latitude = lat;
@@ -644,7 +661,7 @@ function deriveThumbnailUrlFromStreamUrl(streamUrl: string): string {
     <script src="https://cdn.jsdelivr.net/npm/hls.js@latest"></script>
 </svelte:head>
 
-<div class="page">
+<div class="page" style={previewUrl ? `--preview-bg-url: url('${previewUrl}')` : ''}>
     <BreadcrumbBar items={[
         { label: "My Account", href: "/account" },
         { label: "My Uploads", href: "/account/uploads" },
@@ -1220,6 +1237,32 @@ function deriveThumbnailUrlFromStreamUrl(streamUrl: string): string {
         min-height: 100vh;
         background: rgba(0, 0, 0, 0.9);
         padding: 2rem;
+        position: relative;
+        overflow: hidden;
+    }
+    
+    .page::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        width: 100%;
+        height: 500px;
+        background-image: var(--preview-bg-url, none);
+        background-size: 100%;
+        background-position: top;
+        background-repeat: no-repeat;
+        opacity: 0.1;
+        z-index: 0;
+        pointer-events: none;
+        mask-image: linear-gradient(to bottom, black 0%, black 60%, transparent 100%);
+        -webkit-mask-image: linear-gradient(to bottom, black 0%, black 60%, transparent 100%);
+    }
+    
+    .page > * {
+        position: relative;
+        z-index: 1;
     }
 
     .header {
@@ -1264,7 +1307,9 @@ function deriveThumbnailUrlFromStreamUrl(streamUrl: string): string {
         font-size: 2rem;
         font-weight: 700;
         color: #fff;
-        background: rgba(255, 255, 255, 0.05);
+        background: rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
         border: 1px solid rgba(94, 234, 212, 0.3);
         padding: 0.5rem 0.75rem;
         font-family: inherit;
@@ -1273,7 +1318,7 @@ function deriveThumbnailUrlFromStreamUrl(streamUrl: string): string {
     .title-input:focus {
         outline: none;
         border-color: rgba(94, 234, 212, 0.5);
-        background: rgba(255, 255, 255, 0.08);
+        background: rgba(0, 0, 0, 0.7);
     }
 
     .alert {
@@ -1334,10 +1379,13 @@ function deriveThumbnailUrlFromStreamUrl(streamUrl: string): string {
     }
 
     .section {
-        background: rgba(255, 255, 255, 0.02);
+        background: rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(30px);
+        -webkit-backdrop-filter: blur(30px);
         border: 1px solid rgba(255, 255, 255, 0.08);
         padding: 2rem;
         margin-bottom: 1.5rem;
+        border-radius: 8px;
     }
 
     .section-title {
@@ -1380,7 +1428,9 @@ function deriveThumbnailUrlFromStreamUrl(streamUrl: string): string {
     .textarea {
         width: 100%;
         padding: 0.75rem;
-        background: rgba(0, 0, 0, 0.3);
+        background: rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
         border: 1px solid rgba(255, 255, 255, 0.1);
         color: #fff;
         font-size: 0.9375rem;
@@ -1655,9 +1705,12 @@ function deriveThumbnailUrlFromStreamUrl(streamUrl: string): string {
         width: 100%;
         min-height: 44px;
         padding: 0.5rem 0.75rem;
-        background: rgba(0, 0, 0, 0.3);
+        background: rgba(0, 0, 0, 0.6);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
         border: 1px solid rgba(255, 255, 255, 0.1);
         transition: border-color 0.2s;
+        border-radius: 8px;
     }
 
     .keywords-pills-input:focus-within {
@@ -1733,15 +1786,18 @@ function deriveThumbnailUrlFromStreamUrl(streamUrl: string): string {
         align-items: flex-start;
         gap: 1rem;
         padding: 1rem 1.25rem;
-        background: rgba(0, 0, 0, 0.25);
+        background: rgba(0, 0, 0, 0.5);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
         border: 1px solid rgba(255, 255, 255, 0.08);
         cursor: pointer;
         transition: border-color 0.2s, background 0.2s;
+        border-radius: 6px;
     }
 
     .radio-option:hover {
         border-color: rgba(94, 234, 212, 0.4);
-        background: rgba(94, 234, 212, 0.08);
+        background: rgba(0, 0, 0, 0.65);
     }
 
     .radio-input {

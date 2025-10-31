@@ -1,11 +1,48 @@
 import type { PageServerLoad, Actions } from './$types';
 import { createSupabaseServerClient } from '$lib/supabase/server';
 import { getDb } from '$lib/server/db';
-import { getVideoById, updateVideo } from '$lib/server/db/videos';
+import { getVideoById, updateVideo, updateVideoTags } from '$lib/server/db/videos';
 import { ensureUserForAuth } from '$lib/server/db/users';
 import { error, fail } from '@sveltejs/kit';
 import { videos } from '$lib/server/db/schema';
 import { eq } from 'drizzle-orm';
+
+function cleanHost(hostname: string | undefined | null): string | null {
+  if (!hostname) return null;
+  const cleaned = hostname.replace(/^https?:\/\//, '').replace(/\/+$/, '');
+  return cleaned.length ? cleaned : null;
+}
+
+function buildPlaylistUrl(hostname: string | undefined | null, streamId: string | undefined | null): string | null {
+  const host = cleanHost(hostname);
+  const id = typeof streamId === 'string' ? streamId.trim() : '';
+  if (!host || !id) return null;
+  return `https://${host}/${id}/playlist.m3u8`;
+}
+
+function buildOriginalUrl(hostname: string | undefined | null, streamId: string | undefined | null): string | null {
+  const host = cleanHost(hostname);
+  const id = typeof streamId === 'string' ? streamId.trim() : '';
+  if (!host || !id) return null;
+  return `https://${host}/${id}/original`;
+}
+
+function buildThumbnailUrl(hostname: string | undefined | null, streamId: string | undefined | null): string | null {
+  const host = cleanHost(hostname);
+  const id = typeof streamId === 'string' ? streamId.trim() : '';
+  if (!host || !id) return null;
+  return `https://${host}/${id}/thumbnail.jpg`;
+}
+
+function deriveDownloadUrlFromStreamUrl(streamUrl: string | undefined | null): string {
+  if (!streamUrl) return '';
+  return streamUrl.replace(/\/playlist\.m3u8(?:\?.*)?$/, '/original');
+}
+
+function deriveThumbnailUrlFromStreamUrl(streamUrl: string | undefined | null): string {
+  if (!streamUrl) return '';
+  return streamUrl.replace(/\/playlist\.m3u8(?:\?.*)?$/, '/thumbnail.jpg');
+}
 
 export const load: PageServerLoad = async (event) => {
   try {
@@ -66,7 +103,8 @@ export const load: PageServerLoad = async (event) => {
       console.log('[Edit Page Load] Ownership verified');
 
       // Now get the full video object with all the mapped data
-      const video = await getVideoById(db, videoId);
+      const cdnHostForVideo = cleanHost(platform?.env?.BUNNY_CDN_HOST_NAME ?? process.env.BUNNY_CDN_HOST_NAME);
+      const video = await getVideoById(db, videoId, cdnHostForVideo);
       if (!video) {
         throw error(500, 'Failed to load video data');
       }
@@ -81,6 +119,37 @@ export const load: PageServerLoad = async (event) => {
         longitude = location.longitude;
       }
 
+      const cdnHost = cleanHost(platform?.env?.BUNNY_CDN_HOST_NAME ?? process.env.BUNNY_CDN_HOST_NAME);
+      const streamId = video.streamId ?? '';
+      const fallbackVideoUrl = video.videoUrl ?? video.url ?? '';
+      const computedVideoUrl = buildPlaylistUrl(cdnHost, streamId) ?? fallbackVideoUrl;
+      const downloadUrl = buildOriginalUrl(cdnHost, streamId) ?? deriveDownloadUrlFromStreamUrl(fallbackVideoUrl);
+      const thumbnailUrl = buildThumbnailUrl(cdnHost, streamId) ?? deriveThumbnailUrlFromStreamUrl(fallbackVideoUrl);
+
+      // Build all available BunnyCDN thumbnails
+      const getThumbnailBaseUrl = (): string => {
+        if (cdnHost && streamId) {
+          return `https://${cdnHost}/${streamId}`;
+        }
+        // Fallback: derive from video URL
+        if (fallbackVideoUrl) {
+          return fallbackVideoUrl.replace(/\/playlist\.m3u8(?:\?.*)?$/, '').replace(/\/thumbnail\.jpg$/, '');
+        }
+        return '';
+      };
+
+      const thumbnailBase = getThumbnailBaseUrl();
+      const availableThumbnails: string[] = [];
+      
+      if (thumbnailBase) {
+        // Add original thumbnail
+        availableThumbnails.push(`${thumbnailBase}/thumbnail.jpg`);
+        // Add numbered thumbnails (1-5)
+        for (let i = 1; i <= 5; i++) {
+          availableThumbnails.push(`${thumbnailBase}/thumbnail_${i}.jpg`);
+        }
+      }
+
       // Return only what the editor needs
       return {
         data: {
@@ -90,9 +159,16 @@ export const load: PageServerLoad = async (event) => {
           tags: Array.isArray(video.keywords) ? video.keywords : [],
           latitude,
           longitude,
-          videoUrl: video.videoUrl ?? video.url ?? '',
-          thumbnailUrl: video.thumbnailUrl ?? '',
-          duration: video.duration ?? 0
+          videoUrl: computedVideoUrl,
+          duration: video.duration ?? 0,
+          streamId,
+          format: video.format ?? '',
+          aspectRatio: video.aspectRatio ?? '',
+          uploadedAt: video.uploadedAt ?? '',
+          createdAt: video.createdAt ?? '',
+          downloadUrl,
+          thumbnailUrl,
+          availableThumbnails
         }
       };
     } catch (dbError) {
@@ -152,7 +228,8 @@ export const actions: Actions = {
     const description = formData.get('description') as string;
     const latitude = formData.get('latitude') as string;
     const longitude = formData.get('longitude') as string;
-    const thumbnailUrl = formData.get('thumbnailUrl') as string;
+    const uploadedAt = formData.get('uploadedAt') as string;
+    const keywordsJson = formData.get('keywords') as string;
 
     // Validation
     if (!title || title.trim().length === 0) {
@@ -174,6 +251,22 @@ export const actions: Actions = {
     const lat = latitude && latitude.trim() ? parseFloat(latitude) : null;
     const lon = longitude && longitude.trim() ? parseFloat(longitude) : null;
 
+    // Parse uploadedAt
+    const uploadDate = uploadedAt && uploadedAt.trim() ? new Date(uploadedAt) : null;
+
+    // Parse keywords
+    let keywordsArray: string[] = [];
+    if (keywordsJson && keywordsJson.trim()) {
+      try {
+        keywordsArray = JSON.parse(keywordsJson);
+        if (!Array.isArray(keywordsArray)) {
+          keywordsArray = [];
+        }
+      } catch {
+        console.error('Failed to parse keywords JSON');
+      }
+    }
+
     try {
       // Update the video
       await updateVideo(db, videoId, {
@@ -181,8 +274,11 @@ export const actions: Actions = {
         description: description.trim(),
         latitude: lat,
         longitude: lon,
-        thumbnailUrl: thumbnailUrl?.trim() || null
+        uploadedAt: uploadDate
       });
+
+      // Update tags
+      await updateVideoTags(db, videoId, keywordsArray);
 
       return {
         success: true,

@@ -16,16 +16,19 @@ export const load: LayoutServerLoad = async ({ platform }) => {
 		return { videos: [], users: [], error: 'Database not configured.' };
 	}
 
+	// Get CDN hostname from platform environment
+	const cdnHostname = platform?.env?.BUNNY_CDN_HOST_NAME ?? process.env.BUNNY_CDN_HOST_NAME ?? null;
+
 	// 1. Create the db instance from the binding
 	const db = getDb(databaseUrl);
 
 	console.log('Attempting to fetch videos and users...');
 
 	try {
-		// 2. Pass the db instance to your imported functions
+		// 2. Pass the db instance and CDN hostname to your imported functions
 		const [videos, users] = (await Promise.race([
 			Promise.all([
-				getAllVideos(db), // <-- Use the imported function
+				getAllVideos(db, cdnHostname), // <-- Pass CDN hostname
 				getAllUsers(db) // <-- Use the imported function
 			]),
 			new Promise((_, reject) =>

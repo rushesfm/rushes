@@ -44,8 +44,6 @@ export const videos = pgTable(
 		userId: integer('user_id')
 			.notNull()
 			.references(() => users.id, { onDelete: 'cascade' }),
-		videoUrl: text('video_url'),
-		thumbnailUrl: text('thumbnail_url'),
 		duration: integer('duration').notNull().default(0),
 		uploadedAt: timestamp('uploaded_at', { withTimezone: true }),
 		views: integer('views').notNull().default(0),
@@ -53,6 +51,9 @@ export const videos = pgTable(
 		latitude: doublePrecision('latitude'),
 		longitude: doublePrecision('longitude'),
 		transcript: text('transcript'),
+		streamId: text('stream_id'),
+		format: text('format'),
+		aspectRatio: text('aspect_ratio'),
 		createdAt: timestamp('created_at', { withTimezone: true }).defaultNow()
 	},
 	(table) => ({

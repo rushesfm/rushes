@@ -13,6 +13,21 @@ type DrizzleDb = PostgresJsDatabase<typeof schema>;
 const DEFAULT_AVATAR = 'https://i.pravatar.cc/150?img=15';
 const DEFAULT_THUMBNAIL = 'https://placehold.co/400x225?text=Video';
 
+function cleanHost(hostname: string | null | undefined): string | null {
+    if (!hostname) return null;
+    const cleaned = hostname.replace(/^https?:\/\//, '').replace(/\/+$/, '');
+    return cleaned.length ? cleaned : null;
+}
+
+const CDN_HOST = cleanHost(process.env.BUNNY_CDN_HOST_NAME ?? '');
+
+function buildThumbnailUrl(streamId: string | null | undefined): string {
+    const host = CDN_HOST;
+    const id = typeof streamId === 'string' ? streamId.trim() : '';
+    if (!host || !id) return DEFAULT_THUMBNAIL;
+    return `https://${host}/${id}/thumbnail.jpg`;
+}
+
 function slugify(value: string): string {
     return value
         .toLowerCase()
@@ -26,7 +41,7 @@ function slugify(value: string): string {
 function summariseVideos(rows: Array<{
     id: string;
     title: string;
-    thumbnailUrl: string | null;
+    streamId: string | null;
     duration: number | null;
     userId: number;
 }>): Map<number, UserVideoSummary[]> {
@@ -36,7 +51,7 @@ function summariseVideos(rows: Array<{
         entry.push({
             id: row.id,
             title: row.title,
-            thumbnail: row.thumbnailUrl ?? DEFAULT_THUMBNAIL,
+            thumbnail: buildThumbnailUrl(row.streamId),
             duration: row.duration ?? 0
         });
         map.set(row.userId, entry);
@@ -95,7 +110,7 @@ export async function getAllUsers(db: DrizzleDb): Promise<User[]> {
         .select({
             id: videos.id,
             title: videos.title,
-            thumbnailUrl: videos.thumbnailUrl,
+            streamId: videos.streamId,
             duration: videos.duration,
             userId: videos.userId
         })
@@ -124,7 +139,7 @@ export async function getUserBySlug(db: DrizzleDb, slug: string): Promise<User |
         .select({
             id: videos.id,
             title: videos.title,
-            thumbnailUrl: videos.thumbnailUrl,
+            streamId: videos.streamId,
             duration: videos.duration,
             userId: videos.userId
         })

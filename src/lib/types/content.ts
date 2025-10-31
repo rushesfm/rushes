@@ -26,6 +26,9 @@ export interface Video {
 	url?: string;
 	videoUrl?: string;
 	thumbnailUrl?: string;
+	streamId?: string;
+	format?: string;
+	aspectRatio?: string;
 	locations?: Location[];
 	keywords?: string[];
 	transcript?: string;
@@ -36,6 +39,7 @@ export interface Video {
 	timestamp?: string;
 	raw_response_json?: unknown;
 	uploadDate?: string;
+	createdAt?: string;
 }
 
 export interface UserVideoSummary {

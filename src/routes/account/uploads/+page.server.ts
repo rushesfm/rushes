@@ -5,27 +5,27 @@ import { getVideosByUserId } from '$lib/server/db/videos';
 import { ensureUserForAuth } from '$lib/server/db/users';
 
 export const load: PageServerLoad = async (event) => {
-  const supabase = createSupabaseServerClient(event);
-  const {
-    data: { user },
-    error
-  } = await supabase.auth.getUser();
-  const databaseUrl = event.platform?.env?.DATABASE_URL ?? process.env.DATABASE_URL;
-  let db: ReturnType<typeof getDb> | null = null;
-  if (databaseUrl) {
-    db = getDb(databaseUrl);
-  }
-  let appUser = null;
-  if (user && db) {
-    appUser = await ensureUserForAuth(db, user);
-  }
-  let userVideos = [];
-  if (appUser && db) {
-    userVideos = await getVideosByUserId(db, appUser.id);
-  }
-  return {
-    userVideos: userVideos ?? [],
-    sessionUser: user ?? null
-  };
+	const supabase = createSupabaseServerClient(event);
+	const {
+		data: { user },
+		error
+	} = await supabase.auth.getUser();
+	const databaseUrl = event.platform?.env?.DATABASE_URL ?? process.env.DATABASE_URL;
+	let db: ReturnType<typeof getDb> | null = null;
+	if (databaseUrl) {
+		db = getDb(databaseUrl);
+	}
+	let appUser = null;
+	if (user && db) {
+		appUser = await ensureUserForAuth(db, user);
+	}
+	let userVideos = [];
+	if (appUser && db) {
+		const cdnHostname = event.platform?.env?.BUNNY_CDN_HOST_NAME ?? process.env.BUNNY_CDN_HOST_NAME ?? null;
+		userVideos = await getVideosByUserId(db, appUser.id, cdnHostname);
+	}
+	return {
+		userVideos: userVideos ?? [],
+		sessionUser: user ?? null
+	};
 };
-

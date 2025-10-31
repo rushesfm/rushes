@@ -62,7 +62,8 @@ if (user && db) {
 let uploadedVideo = null;
 if (highlightedVideoId && db) {
     try {
-        uploadedVideo = await getVideoById(db, highlightedVideoId);
+        const cdnHostname = event.platform?.env?.BUNNY_CDN_HOST_NAME ?? process.env.BUNNY_CDN_HOST_NAME ?? null;
+        uploadedVideo = await getVideoById(db, highlightedVideoId, cdnHostname);
     } catch (error) {
         console.error('Failed to resolve uploaded video for account page:', error);
     }
@@ -71,7 +72,8 @@ if (highlightedVideoId && db) {
 let userVideos = null;
 if (appUser && db) {
     try {
-        userVideos = await getVideosByUserId(db, appUser.id);
+        const cdnHostname = event.platform?.env?.BUNNY_CDN_HOST_NAME ?? process.env.BUNNY_CDN_HOST_NAME ?? null;
+        userVideos = await getVideosByUserId(db, appUser.id, cdnHostname);
     } catch (error) {
         console.error('Failed to fetch user videos for account page:', error);
     }
@@ -220,7 +222,8 @@ export const actions: Actions = {
 		const databaseUrl = event.platform?.env?.DATABASE_URL ?? process.env.DATABASE_URL;
 		if (!databaseUrl) return fail(500, { delete: { message: 'No DB connection' } });
 		const db = getDb(databaseUrl);
-		const video = await getVideoById(db, videoId);
+		const cdnHostname = event.platform?.env?.BUNNY_CDN_HOST_NAME ?? process.env.BUNNY_CDN_HOST_NAME ?? null;
+		const video = await getVideoById(db, videoId, cdnHostname);
 		if (!video) return fail(404, { delete: { message: 'Video not found' } });
 		// Only allow if the video is yours (authorId = user.slug or id)
 		// Here we check authorId == user.id, this may need tune-up if slug is used

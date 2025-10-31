@@ -25,12 +25,17 @@
     let selectedThumbnail = $state<string>("");
     let videoUrl = $state(""); // This would be set after uploading to storage
     let duration = $state(0);
+    let format = $state("");
+    let aspectRatio = $state("");
+    let thumbnailTime = $state<number>(0); // Time in milliseconds for thumbnail
+    let keywords = $state<string[]>([]);
+    let keywordInput = $state("");
 
     // UI state
     let isProcessing = $state(false);
     let processingStatus = $state("");
-    let thumbnails = $state<string[]>([]);
     let videoPreviewUrl = $state<string>("");
+    let previewVideo = $state<HTMLVideoElement | null>(null);
     let wordCount = $state(0);
     let isSubmitting = $state(false);
     let locationStatus = $state<"detecting" | "found" | "not-found" | null>(
@@ -48,7 +53,7 @@
     let uploadProgress = $state(0);
     let bytesUploaded = $state(0);
     let totalBytes = $state(0);
-    let bunnyVideoId = $state("");
+let streamId = $state("");
     let cdnHostname = $state("");
 
     const uploaderDisplayName = $derived(
@@ -62,6 +67,38 @@
         const trimmedHost = host?.replace(/^https?:\/\//, "").replace(/\/+$/, "");
         if (!trimmedHost || !videoId) return "";
         return `https://${trimmedHost}/${videoId}/playlist.m3u8`;
+    }
+
+    function buildThumbnailUrl(host: string, videoId: string) {
+        const trimmedHost = host?.replace(/^https?:\/\//, "").replace(/\/+$/, "");
+        if (!trimmedHost || !videoId) return "";
+        return `https://${trimmedHost}/${videoId}/thumbnail.jpg`;
+    }
+
+    function deriveFormatFromFile(file: File): string {
+        const name = file.name ?? "";
+        const ext = name.includes(".") ? name.split(".").pop() ?? "" : "";
+        if (ext) {
+            return ext.toUpperCase();
+        }
+        if (file.type) {
+            const parts = file.type.split("/");
+            const subtype = parts.pop();
+            if (subtype) {
+                return subtype.toUpperCase();
+            }
+            return file.type.toUpperCase();
+        }
+        return "";
+    }
+
+    function formatAspectRatio(width: number | null, height: number | null): string {
+        if (!width || !height) return "";
+        const gcd = (a: number, b: number): number => (b === 0 ? a : gcd(b, a % b));
+        const divisor = gcd(width, height);
+        const ratioWidth = Math.round(width / divisor);
+        const ratioHeight = Math.round(height / divisor);
+        return `${ratioWidth}:${ratioHeight}`;
     }
 
     async function resetTusUpload(options: { terminate?: boolean; clearVideoUrl?: boolean } = {}) {
@@ -80,11 +117,14 @@
         uploadProgress = 0;
         bytesUploaded = 0;
         totalBytes = 0;
-        bunnyVideoId = "";
+        streamId = "";
         cdnHostname = "";
 
         if (clearVideoUrl) {
             videoUrl = "";
+            selectedThumbnail = "";
+            // Note: format and aspectRatio are not cleared here because they are extracted
+            // from the video file itself, not from the upload process
         }
     }
 
@@ -92,6 +132,12 @@
         if (!Number.isFinite(bytes) || bytes <= 0) return "0 MB";
         return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
     }
+
+    $effect(() => {
+        if (!selectedThumbnail && cdnHostname && streamId) {
+            selectedThumbnail = buildThumbnailUrl(cdnHostname, streamId);
+        }
+    });
 
     async function startTusUpload() {
         if (!browser || !videoFile) return;
@@ -124,7 +170,7 @@
                 body: JSON.stringify({
                     title: inferredTitle,
                     fileType: videoFile.type,
-                    thumbnailTime: Math.max(0, Math.round(duration * 1000)),
+                    thumbnailTime: thumbnailTime,
                 }),
             });
 
@@ -144,7 +190,7 @@
                 cdnHost?: string | null;
             } = await response.json();
 
-            bunnyVideoId = payload.videoId;
+            streamId = payload.videoId;
             cdnHostname = payload.cdnHost ?? "";
             totalBytes = videoFile.size;
 
@@ -177,13 +223,14 @@
                     }
                 },
                 onSuccess: () => {
-                    uploadStatus = "success";
-                    uploadError = null;
-                    uploadProgress = 100;
-                    if (cdnHostname && bunnyVideoId) {
-                        videoUrl = buildStreamUrl(cdnHostname, bunnyVideoId);
-                    }
-                },
+            uploadStatus = "success";
+            uploadError = null;
+            uploadProgress = 100;
+            if (cdnHostname && streamId) {
+                videoUrl = buildStreamUrl(cdnHostname, streamId);
+                selectedThumbnail = buildThumbnailUrl(cdnHostname, streamId);
+            }
+        },
             });
 
             if (!tusUpload) {
@@ -228,7 +275,7 @@
     }
 
     const uploadCompleted = $derived(
-        uploadStatus === "success" && (Boolean(videoUrl) || Boolean(bunnyVideoId)),
+        uploadStatus === "success" && (Boolean(videoUrl) || Boolean(streamId)),
     );
     const submitDisabled = $derived(
         isSubmitting || isProcessing || !data.uploader || !videoFile,
@@ -285,6 +332,8 @@
                         URL.revokeObjectURL(videoPreviewUrl);
                     }
                     videoPreviewUrl = URL.createObjectURL(videoFile);
+                    format = deriveFormatFromFile(videoFile);
+                    aspectRatio = "";
                     isProcessing = true;
                     processingStatus = "Analyzing video...";
                     locationStatus = "detecting";
@@ -294,7 +343,7 @@
                         buffer,
                         lastModified: videoFile.lastModified,
                     });
-                    await extractVideoDurationAndThumbnails(videoFile);
+                    await extractVideoDuration(videoFile);
                     if (!title) {
                         title = videoFile.name.replace(/\.[^/.]+$/, "").replace(/[_-]/g, " ");
                     }
@@ -307,7 +356,7 @@
         }
     });
 
-    async function extractVideoDurationAndThumbnails(file: File) {
+    async function extractVideoDuration(file: File) {
         try {
             const videoUrl = URL.createObjectURL(file);
             const video = document.createElement("video");
@@ -321,41 +370,16 @@
                 video.onerror = () => reject(new Error("Failed to load video"));
             });
 
+            const width = Number.isFinite(video.videoWidth) ? video.videoWidth : null;
+            const height = Number.isFinite(video.videoHeight) ? video.videoHeight : null;
+            aspectRatio = width && height ? formatAspectRatio(width, height) : "";
+            console.log('[Client] Set aspectRatio:', aspectRatio, 'from dimensions:', width, 'x', height);
+
             duration = Math.round(video.duration);
-
-            // Generate thumbnails
-            processingStatus = "Generating thumbnails...";
-            const videoDuration = video.duration;
-            const canvas = document.createElement("canvas");
-            const ctx = canvas.getContext("2d");
-
-            if (ctx) {
-                const aspectRatio = video.videoHeight / video.videoWidth;
-                canvas.width = 320;
-                canvas.height = Math.round(320 * aspectRatio);
-
-                const thumbCount = 5;
-                const generatedThumbs: string[] = [];
-
-                for (let i = 0; i < thumbCount; i++) {
-                    const timestamp =
-                        (videoDuration / (thumbCount + 1)) * (i + 1);
-                    video.currentTime = timestamp;
-
-                    await new Promise<void>((resolve) => {
-                        video.onseeked = () => resolve();
-                    });
-
-                    ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-                    const dataUrl = canvas.toDataURL("image/jpeg", 0.8);
-                    generatedThumbs.push(dataUrl);
-                }
-
-                thumbnails = generatedThumbs;
-                if (thumbnails.length > 0) {
-                    selectedThumbnail = thumbnails[0];
-                }
-            }
+            
+            // Set default thumbnail time to 30 seconds or 10% of duration, whichever is smaller
+            const defaultTimeSeconds = Math.min(30, Math.floor(duration * 0.1));
+            thumbnailTime = defaultTimeSeconds * 1000; // Convert to milliseconds
 
             URL.revokeObjectURL(videoUrl);
             isProcessing = false;
@@ -366,6 +390,34 @@
             processingStatus = "Error processing video";
         }
     }
+
+    function updateThumbnailTime(seconds: number) {
+        const clampedSeconds = Math.max(0, Math.min(duration, seconds));
+        thumbnailTime = clampedSeconds * 1000; // Convert to milliseconds
+        // Update preview video if available
+        if (previewVideo) {
+            if (previewVideo.readyState >= 2) {
+                previewVideo.currentTime = clampedSeconds;
+            } else {
+                previewVideo.addEventListener('loadedmetadata', () => {
+                    if (previewVideo) {
+                        previewVideo.currentTime = clampedSeconds;
+                    }
+                }, { once: true });
+            }
+        }
+    }
+
+    // Update preview when video is ready
+    $effect(() => {
+        if (previewVideo && videoPreviewUrl && duration > 0) {
+            previewVideo.addEventListener('loadedmetadata', () => {
+                if (previewVideo) {
+                    previewVideo.currentTime = thumbnailTime / 1000;
+                }
+            }, { once: true });
+        }
+    });
 
     async function handleFileSelect(event: Event) {
         const input = event.target as HTMLInputElement;
@@ -380,6 +432,9 @@
 
             videoFile = file;
             videoPreviewUrl = URL.createObjectURL(file);
+            format = file.type || deriveFormatFromFile(file); // Use MIME type, fallback to extension
+            console.log('[Client] Set format:', format, 'from file.type:', file.type);
+            aspectRatio = "";
 
             // Extract metadata from video
             isProcessing = true;
@@ -394,8 +449,8 @@
                 lastModified: file.lastModified,
             });
 
-            // Extract duration and thumbnails in main thread
-            await extractVideoDurationAndThumbnails(file);
+            // Extract duration in main thread
+            await extractVideoDuration(file);
 
             // Set default title from filename
             if (!title) {
@@ -419,9 +474,29 @@
         longitude = lon;
     }
 
-    function selectThumbnail(thumb: string) {
-        selectedThumbnail = thumb;
+    function addKeyword() {
+        const trimmed = keywordInput.trim();
+        if (trimmed && !keywords.includes(trimmed)) {
+            keywords = [...keywords, trimmed];
+            keywordInput = "";
+        }
     }
+
+    function removeKeyword(keyword: string) {
+        keywords = keywords.filter(k => k !== keyword);
+    }
+
+    function handleKeywordKeydown(e: KeyboardEvent) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            addKeyword();
+        } else if ((e.key === 'Backspace' || e.key === 'Delete') && keywordInput === '' && keywords.length > 0) {
+            // Remove the last keyword if input is empty and backspace/delete is pressed
+            e.preventDefault();
+            keywords = keywords.slice(0, -1);
+        }
+    }
+
 
     function updateWordCount() {
         const words = description.trim().split(/\s+/).filter(Boolean);
@@ -524,6 +599,7 @@
 
         // Upload is complete, allow normal submission
         isSubmitting = true;
+        console.log('[Client] Submitting form with format:', format, 'aspectRatio:', aspectRatio);
         return async ({ result, update }: any) => {
             isSubmitting = false;
 
@@ -685,6 +761,17 @@
                                         .padStart(2, "0")}</span
                                 >
                             {/if}
+                            {#if videoFile.type}
+                                <span class="file-format">{videoFile.type}</span>
+                            {/if}
+                            {#if aspectRatio}
+                                <span class="file-aspect-ratio">
+                                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <rect x="3" y="3" width="18" height="18" rx="2"/>
+                                    </svg>
+                                    {aspectRatio}
+                                </span>
+                            {/if}
                         </div>
                     {/if}
                 </div>
@@ -696,15 +783,6 @@
                 {/if}
             </div>
 
-            <!-- Video Preview -->
-            {#if videoPreviewUrl && !isProcessing}
-                <div class="form-group">
-                    <label class="label" for="video-preview">Preview</label>
-                    <video id="video-preview" class="video-preview" src={videoPreviewUrl} controls>
-                        <track kind="captions" label="No captions" />
-                    </video>
-                </div>
-            {/if}
 
             <!-- Title -->
             <div class="form-group">
@@ -722,7 +800,7 @@
             </div>
 
             <!-- Uploader -->
-            <div class="form-group">
+            <!-- <div class="form-group">
                 <label class="label" for="uploader-pill">Uploading as</label>
                 <div id="uploader-pill" class="uploader-pill">
                     <span class="uploader-avatar">{uploaderDisplayName.slice(0, 1).toUpperCase()}</span>
@@ -738,7 +816,7 @@
                         We couldn&apos;t link your account to a creator profile. Please contact support before uploading.
                     </p>
                 {/if}
-            </div>
+            </div> -->
 
             <!-- Upload Date -->
             <div class="form-group">
@@ -753,6 +831,30 @@
                 <p class="hint">
                     Automatically detected from video metadata when available
                 </p>
+            </div>
+
+            <!-- Keywords -->
+            <div class="form-group">
+                <label for="keywords" class="label">Keywords</label>
+                <div class="keywords-input-container">
+                    <div class="keywords-pills-input">
+                        {#each keywords as keyword}
+                            <span class="keyword-pill">
+                                {keyword}
+                                <button type="button" class="remove-pill" onclick={() => removeKeyword(keyword)}>×</button>
+                            </span>
+                        {/each}
+                        <input
+                            id="keywords"
+                            type="text"
+                            class="keywords-text-input"
+                            bind:value={keywordInput}
+                            onkeydown={handleKeywordKeydown}
+                            placeholder={keywords.length === 0 ? "Add keyword and press Enter" : ""}
+                        />
+                    </div>
+                </div>
+                <p class="hint">Add keywords to help people discover your video</p>
             </div>
 
             <!-- Location Status -->
@@ -825,49 +927,46 @@
                 ></textarea>
             </div>
 
-            <!-- Thumbnail Picker -->
-            {#if thumbnails.length > 0}
+            <!-- Video Preview with Thumbnail Time Picker -->
+            {#if videoPreviewUrl && !isProcessing}
                 <div class="form-group">
-                    <fieldset>
-                        <legend class="label">Select Thumbnail</legend>
-                        <div class="thumbnail-grid">
-                            {#each thumbnails as thumb, i}
-                                <button
-                                    type="button"
-                                    class="thumbnail-option"
-                                    class:selected={selectedThumbnail === thumb}
-                                    onclick={() => selectThumbnail(thumb)}
-                                    aria-label={`Select Thumbnail ${i+1}`}
-                                >
-                                    <img src={thumb} alt="Thumbnail {i + 1}" />
-                                    {#if selectedThumbnail === thumb}
-                                        <div class="selected-indicator">
-                                            <svg
-                                                width="24"
-                                                height="24"
-                                                viewBox="0 0 24 24"
-                                                fill="none"
-                                            >
-                                                <circle
-                                                    cx="12"
-                                                    cy="12"
-                                                    r="10"
-                                                    fill="currentColor"
-                                                />
-                                                <path
-                                                    d="M8 12L11 15L16 9"
-                                                    stroke="white"
-                                                    stroke-width="2"
-                                                    stroke-linecap="round"
-                                                    stroke-linejoin="round"
-                                                />
-                                            </svg>
-                                        </div>
-                                    {/if}
-                                </button>
-                            {/each}
+                    <label class="label">Video Preview</label>
+                    <p class="hint">Preview your video and select the thumbnail time</p>
+                    <div class="video-preview-with-thumbnail">
+                        <div class="preview-video-container">
+                            <video
+                                bind:this={previewVideo}
+                                id="video-preview"
+                                class="video-preview"
+                                src={videoPreviewUrl}
+                            >
+                                <track kind="captions" label="No captions" />
+                            </video>
+                            {#if duration > 0}
+                                <div class="thumbnail-time-display">
+                                    Thumbnail: {Math.floor(thumbnailTime / 1000 / 60)}:{(Math.floor(thumbnailTime / 1000) % 60).toString().padStart(2, "0")}
+                                </div>
+                            {/if}
                         </div>
-                    </fieldset>
+                        {#if duration > 0}
+                            <div class="thumbnail-slider-container">
+                                <label class="thumbnail-slider-label">Select thumbnail time</label>
+                                <input
+                                    type="range"
+                                    min="0"
+                                    max={duration}
+                                    step="1"
+                                    value={thumbnailTime / 1000}
+                                    oninput={(e) => updateThumbnailTime(parseFloat((e.target as HTMLInputElement).value))}
+                                    class="thumbnail-slider"
+                                />
+                                <div class="thumbnail-slider-labels">
+                                    <span>0:00</span>
+                                    <span>{Math.floor(duration / 60)}:{(duration % 60).toString().padStart(2, "0")}</span>
+                                </div>
+                            </div>
+                        {/if}
+                    </div>
                 </div>
             {/if}
 
@@ -894,9 +993,11 @@
             <input type="hidden" name="latitude" value={latitude ?? ""} />
             <input type="hidden" name="longitude" value={longitude ?? ""} />
             <input type="hidden" name="videoUrl" value={videoUrl} />
-            <input type="hidden" name="thumbnailUrl" value={selectedThumbnail} />
             <input type="hidden" name="duration" value={duration} />
-            <input type="hidden" name="bunnyVideoId" value={bunnyVideoId} />
+            <input type="hidden" name="streamId" value={streamId} />
+            <input type="hidden" name="format" value={format} />
+            <input type="hidden" name="aspectRatio" value={aspectRatio} />
+            <input type="hidden" name="keywords" value={JSON.stringify(keywords)} />
 
             <!-- Submit Button -->
             <div class="form-actions">
@@ -1035,11 +1136,16 @@
     }
 
     .file-size,
-    .file-duration {
+    .file-duration,
+    .file-format,
+    .file-aspect-ratio {
         padding: 0.25rem 0.75rem;
         background: rgba(30, 41, 59, 0.6);
         border-radius: 6px;
         font-variant-numeric: tabular-nums;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.375rem;
     }
 
     .upload-panel {
@@ -1258,11 +1364,25 @@
         flex-shrink: 0;
     }
 
+    .video-preview-with-thumbnail {
+        display: grid;
+        gap: 1rem;
+    }
+
+    .preview-video-container {
+        position: relative;
+        width: 100%;
+        border-radius: 12px;
+        overflow: hidden;
+        background: rgba(0, 0, 0, 0.5);
+        border: 1px solid rgba(148, 163, 184, 0.2);
+    }
+
     .video-preview {
         width: 100%;
-        max-height: 400px;
+        max-height: 500px;
+        display: block;
         border-radius: 12px;
-        background: rgba(0, 0, 0, 0.5);
     }
 
     .input,
@@ -1307,51 +1427,70 @@
         color: #fca5a5;
     }
 
-    .thumbnail-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-        gap: 1rem;
-    }
-
-    .thumbnail-option {
-        position: relative;
-        aspect-ratio: 16 / 9;
-        border-radius: 8px;
-        overflow: hidden;
-        border: 2px solid rgba(148, 163, 184, 0.2);
-        background: rgba(30, 41, 59, 0.6);
-        cursor: pointer;
-        transition:
-            border-color 0.2s ease,
-            transform 0.2s ease;
-        padding: 0;
-    }
-
-    .thumbnail-option:hover {
-        border-color: rgba(94, 234, 212, 0.5);
-        transform: scale(1.05);
-    }
-
-    .thumbnail-option.selected {
-        border-color: #5eead4;
-    }
-
-    .thumbnail-option img {
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-    }
-
-    .selected-indicator {
+    .thumbnail-time-display {
         position: absolute;
-        top: 0.5rem;
-        right: 0.5rem;
-        color: #5eead4;
+        bottom: 0.75rem;
+        left: 0.75rem;
+        padding: 0.5rem 0.75rem;
         background: rgba(15, 23, 42, 0.9);
+        border-radius: 6px;
+        color: #5eead4;
+        font-size: 0.875rem;
+        font-weight: 600;
+        font-variant-numeric: tabular-nums;
+        pointer-events: none;
+    }
+
+    .thumbnail-slider-container {
+        display: grid;
+        gap: 0.5rem;
+    }
+
+    .thumbnail-slider-label {
+        font-size: 0.85rem;
+        color: rgba(226, 232, 240, 0.8);
+        font-weight: 500;
+    }
+
+    .thumbnail-slider {
+        width: 100%;
+        height: 0.5rem;
+        border-radius: 999px;
+        background: rgba(148, 163, 184, 0.2);
+        outline: none;
+        -webkit-appearance: none;
+        appearance: none;
+        cursor: pointer;
+    }
+
+    .thumbnail-slider::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        appearance: none;
+        width: 1.25rem;
+        height: 1.25rem;
         border-radius: 50%;
+        background: #5eead4;
+        cursor: pointer;
+        border: 2px solid rgba(15, 23, 42, 0.9);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    }
+
+    .thumbnail-slider::-moz-range-thumb {
+        width: 1.25rem;
+        height: 1.25rem;
+        border-radius: 50%;
+        background: #5eead4;
+        cursor: pointer;
+        border: 2px solid rgba(15, 23, 42, 0.9);
+        box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    }
+
+    .thumbnail-slider-labels {
         display: flex;
-        align-items: center;
-        justify-content: center;
+        justify-content: space-between;
+        font-size: 0.75rem;
+        color: rgba(226, 232, 240, 0.6);
+        font-variant-numeric: tabular-nums;
     }
 
     .location-detected {
@@ -1397,6 +1536,86 @@
     }
 
     .visually-hidden { display: none !important; }
+
+    .keywords-input-container {
+        width: 100%;
+    }
+
+    .keywords-pills-input {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5rem;
+        width: 100%;
+        min-height: 44px;
+        padding: 0.5rem 0.75rem;
+        background: rgba(0, 0, 0, 0.3);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 6px;
+        transition: border-color 0.2s;
+    }
+
+    .keywords-pills-input:focus-within {
+        border-color: rgba(94, 234, 212, 0.5);
+    }
+
+    .keyword-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        padding: 0.375rem 0.625rem;
+        background: rgba(94, 234, 212, 0.15);
+        border: 1px solid rgba(94, 234, 212, 0.3);
+        color: #5eead4;
+        font-size: 0.8125rem;
+        font-weight: 500;
+        border-radius: 12px;
+        white-space: nowrap;
+    }
+
+    .remove-pill {
+        background: none;
+        border: none;
+        color: inherit;
+        font-size: 1.125rem;
+        line-height: 1;
+        cursor: pointer;
+        padding: 0;
+        margin-left: 0.125rem;
+        opacity: 0.7;
+        transition: opacity 0.2s;
+    }
+
+    .remove-pill:hover {
+        opacity: 1;
+    }
+
+    .keywords-text-input {
+        flex: 1;
+        min-width: 120px;
+        background: transparent;
+        border: none;
+        color: #fff;
+        font-size: 0.9375rem;
+        font-family: inherit;
+        padding: 0;
+        outline: none !important;
+        box-shadow: none !important;
+        -webkit-appearance: none;
+        -moz-appearance: none;
+        appearance: none;
+    }
+
+    .keywords-text-input:focus {
+        outline: none !important;
+        box-shadow: none !important;
+        border: none !important;
+        -webkit-tap-highlight-color: transparent;
+    }
+
+    .keywords-text-input::placeholder {
+        color: rgba(255, 255, 255, 0.3);
+    }
 
     @media (max-width: 640px) {
         .page {

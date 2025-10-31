@@ -11,6 +11,26 @@ type DrizzleDb = PostgresJsDatabase<typeof schema>;
 
 const videoColumns = getTableColumns(videos);
 
+function cleanHost(hostname: string | null | undefined): string | null {
+    if (!hostname) return null;
+    const cleaned = hostname.replace(/^https?:\/\//, '').replace(/\/+$/, '');
+    return cleaned.length ? cleaned : null;
+}
+
+function buildStreamUrl(hostname: string | null | undefined, streamId: string | null | undefined): string | undefined {
+    const cleanedHost = cleanHost(hostname ?? process.env.BUNNY_CDN_HOST_NAME ?? '');
+    const trimmedStream = typeof streamId === 'string' ? streamId.trim() : '';
+    if (!cleanedHost || !trimmedStream) return undefined;
+    return `https://${cleanedHost}/${trimmedStream}/playlist.m3u8`;
+}
+
+function buildThumbnailUrl(hostname: string | null | undefined, streamId: string | null | undefined): string | undefined {
+    const cleanedHost = cleanHost(hostname ?? process.env.BUNNY_CDN_HOST_NAME ?? '');
+    const trimmedStream = typeof streamId === 'string' ? streamId.trim() : '';
+    if (!cleanedHost || !trimmedStream) return undefined;
+    return `https://${cleanedHost}/${trimmedStream}/thumbnail.jpg`;
+}
+
 type SelectedVideoRow = typeof videos.$inferSelect & {
 	userName: string;
 	userSlug: string;
@@ -19,7 +39,7 @@ type SelectedVideoRow = typeof videos.$inferSelect & {
 
 // --- Internal Helper Function ---
 
-function mapRowToVideo(row: SelectedVideoRow) {
+function mapRowToVideo(row: SelectedVideoRow, cdnHostname?: string | null) {
 	const coordinates =
 		typeof row.latitude === 'number' && typeof row.longitude === 'number'
 			? [
@@ -44,21 +64,29 @@ function mapRowToVideo(row: SelectedVideoRow) {
 	const createdAt =
 		row.createdAt instanceof Date ? row.createdAt.toISOString() : row.createdAt ?? undefined;
 
-	return {
-		id: row.id,
-		title: row.title,
-		description: row.description,
-		author: row.userName,
-		authorId: row.userSlug,
-		duration: row.duration ?? 0,
-		uploadedAt,
-		uploadDate: uploadedAt,
-		url: row.videoUrl ?? undefined,
-		videoUrl: row.videoUrl ?? undefined,
-		thumbnailUrl: row.thumbnailUrl ?? undefined,
+    const streamId = typeof row.streamId === 'string' ? row.streamId : undefined;
+    const videoUrl = buildStreamUrl(cdnHostname ?? process.env.BUNNY_CDN_HOST_NAME, streamId) ?? undefined;
+    const thumbnailUrl = buildThumbnailUrl(cdnHostname ?? process.env.BUNNY_CDN_HOST_NAME, streamId);
+
+    return {
+        id: row.id,
+        title: row.title,
+        description: row.description,
+        author: row.userName,
+        authorId: row.userSlug,
+        duration: row.duration ?? 0,
+        uploadedAt,
+        uploadDate: uploadedAt,
+        createdAt,
+        url: videoUrl,
+        videoUrl,
+        thumbnailUrl,
+        streamId,
+        format: row.format ?? undefined,
+        aspectRatio: row.aspectRatio ?? undefined,
 		locations: coordinates,
 		transcript: row.transcript ?? 'Transcript not available.',
-	keywords: [] as string[],
+		keywords: [] as string[],
 		views: row.views ?? 0,
 		likes: row.likes ?? 0,
 		timestamp: uploadedAt ?? createdAt
@@ -67,7 +95,7 @@ function mapRowToVideo(row: SelectedVideoRow) {
 
 // --- Exported Database Functions ---
 
-export async function getAllVideos(db: DrizzleDb): Promise<Video[]> {
+export async function getAllVideos(db: DrizzleDb, cdnHostname?: string | null): Promise<Video[]> {
 	const rows = (await db
 		.select({
 			...videoColumns,
@@ -107,13 +135,13 @@ export async function getAllVideos(db: DrizzleDb): Promise<Video[]> {
 	}
 
 	return rows.map((row) => {
-		const mapped = mapRowToVideo(row);
+		const mapped = mapRowToVideo(row, cdnHostname);
 		mapped.keywords = tagsByVideo.get(row.id) ?? [];
 		return mapped;
 	});
 }
 
-export async function getVideoById(db: DrizzleDb, id: string): Promise<Video | null> {
+export async function getVideoById(db: DrizzleDb, id: string, cdnHostname?: string | null): Promise<Video | null> {
 	const rows = (await db
 		.select({
 			...videoColumns,
@@ -139,12 +167,12 @@ export async function getVideoById(db: DrizzleDb, id: string): Promise<Video | n
 		.where(eq(videoTags.videoId, id))
 		.execute();
 
-	const video = mapRowToVideo(rows[0] as SelectedVideoRow);
+	const video = mapRowToVideo(rows[0] as SelectedVideoRow, cdnHostname);
 	video.keywords = videoTagsRows.map((row) => row.tag ?? '').filter(Boolean);
 	return video;
 }
 
-export async function getVideosByUserId(db: DrizzleDb, userId: number): Promise<Video[]> {
+export async function getVideosByUserId(db: DrizzleDb, userId: number, cdnHostname?: string | null): Promise<Video[]> {
 	const rows = (await db
 		.select({
 			...videoColumns,
@@ -185,7 +213,7 @@ export async function getVideosByUserId(db: DrizzleDb, userId: number): Promise<
 	}
 
 	return rows.map((row) => {
-		const mapped = mapRowToVideo(row);
+		const mapped = mapRowToVideo(row, cdnHostname);
 		mapped.keywords = tagsByVideo.get(row.id) ?? [];
 		return mapped;
 	});
@@ -199,7 +227,11 @@ export async function updateVideo(
 		description?: string;
 		latitude?: number | null;
 		longitude?: number | null;
-		thumbnailUrl?: string | null;
+		uploadedAt?: Date | null;
+		duration?: number | null;
+		streamId?: string | null;
+		format?: string | null;
+		aspectRatio?: string | null;
 	}
 ): Promise<void> {
 	await db
@@ -207,4 +239,57 @@ export async function updateVideo(
 		.set(updates)
 		.where(eq(videos.id, id))
 		.execute();
+}
+
+export async function updateVideoTags(
+	db: DrizzleDb,
+	videoId: string,
+	tagNames: string[]
+): Promise<void> {
+	// First, delete all existing tags for this video
+	await db
+		.delete(videoTags)
+		.where(eq(videoTags.videoId, videoId))
+		.execute();
+
+	if (tagNames.length === 0) {
+		return;
+	}
+
+	// Get or create tags
+	const tagIds: number[] = [];
+	for (const tagName of tagNames) {
+		const trimmedTag = tagName.trim();
+		if (!trimmedTag) continue;
+
+		// Try to find existing tag
+		const existingTags = await db
+			.select()
+			.from(tags)
+			.where(eq(tags.name, trimmedTag))
+			.limit(1)
+			.execute();
+
+		let tagId: number;
+		if (existingTags.length > 0) {
+			tagId = existingTags[0].id;
+		} else {
+			// Create new tag
+			const newTags = await db
+				.insert(tags)
+				.values({ name: trimmedTag })
+				.returning({ id: tags.id })
+				.execute();
+			tagId = newTags[0].id;
+		}
+		tagIds.push(tagId);
+	}
+
+	// Create video-tag associations
+	if (tagIds.length > 0) {
+		await db
+			.insert(videoTags)
+			.values(tagIds.map(tagId => ({ videoId, tagId })))
+			.execute();
+	}
 }

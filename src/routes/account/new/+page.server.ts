@@ -7,6 +7,7 @@ import { videos } from '$lib/server/db/schema';
 import { nanoid } from 'nanoid';
 import { createSupabaseServerClient } from '$lib/supabase/server';
 import { ensureUserForAuth } from '$lib/server/db/users';
+import { updateVideoTags } from '$lib/server/db/videos';
 
 function resolveEnv(
 	platformEnv: Record<string, string | undefined> | undefined,
@@ -91,12 +92,29 @@ export const actions: Actions = {
 		const title = formData.get('title') as string;
 		const description = formData.get('description') as string;
 		const uploadedAt = formData.get('uploadedAt') as string;
-		const bunnyVideoId = (formData.get('bunnyVideoId') as string | null)?.trim() ?? '';
+		const streamId = (formData.get('streamId') as string | null)?.trim() ?? '';
 		const latitude = formData.get('latitude') as string;
 		const longitude = formData.get('longitude') as string;
 		const videoUrl = formData.get('videoUrl') as string;
-		const thumbnailUrl = formData.get('thumbnailUrl') as string;
 		const duration = formData.get('duration') as string;
+		const formatValue = (formData.get('format') as string | null)?.trim() ?? '';
+		const aspectRatioValue = (formData.get('aspectRatio') as string | null)?.trim() ?? '';
+		const keywordsJson = formData.get('keywords') as string;
+		
+		console.log('[Upload] Received format:', formatValue);
+		console.log('[Upload] Received aspectRatio:', aspectRatioValue);
+		console.log('[Upload] Received keywords:', keywordsJson);
+		
+		// If format contains '/' it's a MIME type (e.g., "video/mp4"), keep it as-is
+		// Otherwise it's a file extension, uppercase it (e.g., "MP4")
+		const normalizedFormat = formatValue && formatValue.length > 0
+			? (formatValue.includes('/') ? formatValue : formatValue.toUpperCase())
+			: null;
+		
+		const aspectRatio = aspectRatioValue && aspectRatioValue.length > 0 ? aspectRatioValue : null;
+		
+		console.log('[Upload] Normalized format:', normalizedFormat);
+		console.log('[Upload] Final aspectRatio:', aspectRatio);
 
 		if (!title || title.trim().length === 0) {
 			return fail(400, { error: 'Title is required', field: 'title' });
@@ -118,8 +136,8 @@ export const actions: Actions = {
 		const cdnHost = resolveEnv(platformEnv, 'BUNNY_CDN_HOST_NAME');
 
 		let finalVideoUrl = videoUrl?.trim();
-		if ((!finalVideoUrl || finalVideoUrl.length === 0) && bunnyVideoId) {
-			const streamUrl = buildStreamUrl(cdnHost, bunnyVideoId);
+		if ((!finalVideoUrl || finalVideoUrl.length === 0) && streamId) {
+			const streamUrl = buildStreamUrl(cdnHost, streamId);
 			if (streamUrl) {
 				finalVideoUrl = streamUrl;
 			}
@@ -138,26 +156,50 @@ export const actions: Actions = {
 			const lat = latitude ? parseFloat(latitude) : null;
 			const lon = longitude ? parseFloat(longitude) : null;
 
-			await db.insert(videos).values({
+			const insertData = {
 				id: videoId,
 				title: title.trim(),
 				description: description.trim(),
 				userId: dbUser.id,
-				videoUrl: finalVideoUrl,
-				thumbnailUrl: thumbnailUrl?.trim() || null,
 				duration: durationNum,
 				uploadedAt: uploadedAt ? new Date(uploadedAt) : new Date(),
 				latitude: lat,
 				longitude: lon,
 				views: 0,
 				likes: 0,
-				transcript: null
-			});
+				transcript: null,
+				streamId: streamId || null,
+				format: normalizedFormat,
+				aspectRatio: aspectRatio
+			};
+			
+			console.log('[Upload] Inserting video with format:', insertData.format);
+			console.log('[Upload] Inserting video with aspectRatio:', insertData.aspectRatio);
+			
+			await db.insert(videos).values(insertData);
+
+			// Parse and save keywords/tags
+			let keywordsArray: string[] = [];
+			if (keywordsJson && keywordsJson.trim()) {
+				try {
+					keywordsArray = JSON.parse(keywordsJson);
+					if (!Array.isArray(keywordsArray)) {
+						keywordsArray = [];
+					}
+				} catch {
+					console.error('Failed to parse keywords JSON');
+				}
+			}
+
+			// Save tags to database
+			if (keywordsArray.length > 0) {
+				await updateVideoTags(db, videoId, keywordsArray);
+			}
 
 			return {
 				success: true,
 				videoUrl: finalVideoUrl,
-				bunnyVideoId,
+				streamId,
 				videoId
 			};
 		} catch (error) {

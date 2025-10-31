@@ -42,6 +42,24 @@
 
     const currentVideo = $derived(resolveVideo($selectedVideo.id));
 
+    // Calculate aspect ratio from video's aspectRatio string (e.g., "16:9")
+    function parseAspectRatio(aspectRatio?: string): number | null {
+        if (!aspectRatio) return null;
+        const parts = aspectRatio.split(':');
+        if (parts.length !== 2) return null;
+        const width = parseFloat(parts[0]);
+        const height = parseFloat(parts[1]);
+        if (!Number.isFinite(width) || !Number.isFinite(height) || height === 0) return null;
+        return width / height;
+    }
+
+    const videoAspectRatio = $derived(parseAspectRatio(currentVideo?.aspectRatio));
+    // Use a default 16:9 ratio if no aspect ratio is available to prevent jumping
+    const effectiveAspectRatio = $derived(videoAspectRatio ?? 16/9);
+    const aspectRatioStyle = $derived(
+        `padding-bottom: ${(1 / effectiveAspectRatio) * 100}%`
+    );
+
     // VideoInfo data logic (from VideoInfoContainer)
     interface VideoData {
         video: Video;
@@ -257,14 +275,17 @@
                         <QueueBanner />
                         <div
                             id="video-aspect-container"
-                            class="relative aspect-video w-full border-b border-white/10 bg-black shadow-[0_24px_80px_-48px_rgba(8,47,73,0.85)]"
+                            class="relative w-full border-b border-white/10 bg-black shadow-[0_24px_80px_-48px_rgba(8,47,73,0.85)]"
+                            style={aspectRatioStyle || undefined}
                         >
-                            <div class="h-full w-full">
+                            <div class="absolute inset-0 w-full h-full overflow-hidden">
                                 <MuxVideoPlayer
                                     src={currentVideo?.videoUrl}
                                     autoplayUserPreference={true}
                                     startTime={videoStartTime}
                                     playerKey={`sidebar-player-${currentVideo?.id ?? "none"}-${Math.floor(videoStartTime)}-${$selectedVideo.queueContext ? 'queue' : 'live'}`}
+                                    title={currentVideo?.title ?? ""}
+                                    duration={currentVideo?.duration ?? 0}
                                 />
                             </div>
                         </div>
@@ -334,6 +355,38 @@
         overflow: hidden;
         object-fit: cover !important;
         object-position: center center !important;
+    }
+    
+    /* Prevent video from showing at natural size during transitions */
+    :global(#video-aspect-container) {
+        min-height: 0;
+        contain: layout style paint;
+        overflow: hidden;
+        transition: padding-bottom 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+    
+    :global(#video-aspect-container .video-container) {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        position: relative;
+    }
+    
+    :global(#video-aspect-container media-controller) {
+        width: 100%;
+        height: 100%;
+        display: block;
+        overflow: hidden;
+    }
+    
+    :global(#video-aspect-container hls-video),
+    :global(#video-aspect-container video) {
+        width: 100% !important;
+        height: 100% !important;
+        object-fit: contain !important;
+        display: block;
+        position: relative;
+        margin: 0;
     }
 
     :global(#player-container.fullscreen) {

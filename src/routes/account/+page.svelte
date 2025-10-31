@@ -144,9 +144,9 @@ function formatDateTime(value?: string | Date | null) {
 							</button>
 							<a
 								class="rounded-lg border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-teal-200 transition hover:bg-white/20 focus:outline-none focus:ring-2 focus:ring-white/20 focus:border-white/30"
-								href="/account/uploads"
+								href="/account/edit"
 							>
-								Manage uploads
+								Manage account
 							</a>
 						</div>
 						<form method="POST" action="?/logout" class="flex justify-end">

@@ -63,7 +63,14 @@ export const POST: RequestHandler = async (event) => {
 	}
 
 	// Parse request body
-	const body = await event.request.json().catch(() => null);
+	let body;
+	try {
+		body = await event.request.json();
+	} catch (err) {
+		console.error('Failed to parse request body:', err);
+		throw error(400, 'Invalid request body');
+	}
+
 	if (!body || typeof body.thumbnailUrl !== 'string') {
 		throw error(400, 'Thumbnail URL is required');
 	}
@@ -71,7 +78,6 @@ export const POST: RequestHandler = async (event) => {
 	const thumbnailUrl = body.thumbnailUrl;
 
 	// Call BunnyCDN API to update thumbnail
-	const platformEnv = platform?.env as Record<string, string | undefined> | undefined;
 	const libraryId = resolveEnv(platformEnv, 'BUNNY_VIDEO_LIBRARY_ID');
 	const apiKey = resolveEnv(platformEnv, 'BUNNY_API_CODE');
 
@@ -83,27 +89,55 @@ export const POST: RequestHandler = async (event) => {
 		// BunnyCDN expects the thumbnailUrl as a query parameter (percent-encoded)
 		const bunnyUrl = `https://video.bunnycdn.com/library/${libraryId}/videos/${video.streamId}/thumbnail?thumbnailUrl=${encodeURIComponent(thumbnailUrl)}`;
 		
+		console.log('Updating thumbnail:', {
+			libraryId,
+			streamId: video.streamId,
+			thumbnailUrl,
+			url: bunnyUrl
+		});
+		
 		const response = await fetch(bunnyUrl, {
 			method: 'POST',
 			headers: {
-				'AccessKey': apiKey
+				'AccessKey': apiKey,
+				'Content-Type': 'application/json'
 			}
 		});
 
 		if (!response.ok) {
 			const errorText = await response.text().catch(() => 'Unknown error');
-			console.error('BunnyCDN thumbnail update failed:', response.status, errorText);
-			const errorMessage = errorText || `BunnyCDN returned status ${response.status}`;
+			console.error('BunnyCDN thumbnail update failed:', {
+				status: response.status,
+				statusText: response.statusText,
+				error: errorText,
+				url: bunnyUrl
+			});
+			
+			let errorMessage = errorText || `BunnyCDN returned status ${response.status}`;
+			
+			// Try to parse JSON error if possible
+			try {
+				const errorJson = JSON.parse(errorText);
+				if (errorJson.Message) {
+					errorMessage = errorJson.Message;
+				} else if (errorJson.error) {
+					errorMessage = errorJson.error;
+				}
+			} catch {
+				// Keep original error message
+			}
+			
 			return json({ error: errorMessage }, { status: response.status });
 		}
 
 		return json({ success: true, thumbnailUrl });
 	} catch (err) {
 		console.error('Thumbnail update error:', err);
-		if (err && typeof err === 'object' && 'status' in err) {
+		if (err && typeof err === 'object' && 'status' in err && typeof (err as any).status === 'number') {
 			throw err;
 		}
-		throw error(500, 'Failed to update thumbnail');
+		const errorMessage = err instanceof Error ? err.message : 'Failed to update thumbnail';
+		return json({ error: errorMessage }, { status: 500 });
 	}
 };
 

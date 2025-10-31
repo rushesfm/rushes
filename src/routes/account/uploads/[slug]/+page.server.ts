@@ -3,7 +3,7 @@ import { createSupabaseServerClient } from '$lib/supabase/server';
 import { getDb } from '$lib/server/db';
 import { getVideoById, updateVideo, updateVideoTags } from '$lib/server/db/videos';
 import { ensureUserForAuth } from '$lib/server/db/users';
-import { error, fail } from '@sveltejs/kit';
+import { error, fail, redirect } from '@sveltejs/kit';
 import { videos } from '$lib/server/db/schema';
 import { eq } from 'drizzle-orm';
 
@@ -291,5 +291,78 @@ export const actions: Actions = {
         details: err instanceof Error ? err.message : 'Unknown error'
       });
     }
+  },
+  deleteVideo: async (event) => {
+    const { params, platform } = event;
+    const videoId = params.slug;
+
+    const supabase = createSupabaseServerClient(event);
+    const { data: { user } } = await supabase.auth.getUser();
+
+    if (!user) {
+      return fail(401, { error: 'You must be signed in to delete videos.' });
+    }
+
+    const databaseUrl = platform?.env?.DATABASE_URL ?? process.env.DATABASE_URL;
+    if (!databaseUrl) {
+      return fail(500, { error: 'Database not configured.' });
+    }
+
+    const db = getDb(databaseUrl);
+    const appUser = await ensureUserForAuth(db, user);
+
+    // Verify ownership - check raw video data
+    const rawVideoRows = await db
+      .select()
+      .from(videos)
+      .where(eq(videos.id, videoId))
+      .limit(1)
+      .execute();
+
+    if (!rawVideoRows.length) {
+      return fail(404, { error: 'Video not found' });
+    }
+
+    const rawVideo = rawVideoRows[0];
+    if (rawVideo.userId !== appUser.id) {
+      return fail(403, { error: 'You do not have permission to delete this video' });
+    }
+
+    // Get streamId before deletion for BunnyCDN deletion
+    const streamId = rawVideo.streamId;
+
+    // Delete from BunnyCDN if streamId exists
+    if (streamId) {
+      const platformEnv = platform?.env as Record<string, string | undefined> | undefined;
+      const libraryId = platformEnv?.['BUNNY_VIDEO_LIBRARY_ID'] ?? process.env.BUNNY_VIDEO_LIBRARY_ID;
+      const apiKey = platformEnv?.['BUNNY_API_CODE'] ?? process.env.BUNNY_API_CODE;
+
+      if (libraryId && apiKey) {
+        try {
+          const bunnyUrl = `https://video.bunnycdn.com/library/${libraryId}/videos/${streamId}`;
+          const response = await fetch(bunnyUrl, {
+            method: 'DELETE',
+            headers: {
+              'AccessKey': apiKey
+            }
+          });
+
+          if (!response.ok) {
+            const errorText = await response.text().catch(() => 'Unknown error');
+            console.error('BunnyCDN delete failed:', response.status, errorText);
+            // Continue with database deletion even if BunnyCDN deletion fails
+          }
+        } catch (err) {
+          console.error('Error deleting video from BunnyCDN:', err);
+          // Continue with database deletion even if BunnyCDN deletion fails
+        }
+      }
+    }
+
+    // Delete the video from database
+    await db.delete(videos).where(eq(videos.id, videoId)).execute();
+
+    // Redirect to uploads page after delete
+    throw redirect(303, '/account/uploads');
   }
 };

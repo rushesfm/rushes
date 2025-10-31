@@ -108,10 +108,34 @@
         isEditingTitle = true;
     }
 
-    function finishEditingTitle() {
+    async function finishEditingTitle() {
         isEditingTitle = false;
         if (!title.trim()) {
             title = data.data?.title ?? "";
+            return;
+        }
+        
+        // Auto-save title when editing finishes
+        if (title.trim() !== (data.data?.title ?? "")) {
+            try {
+                const formData = new FormData();
+                formData.append('title', title.trim());
+                formData.append('description', description);
+                formData.append('latitude', latitude?.toString() ?? '');
+                formData.append('longitude', longitude?.toString() ?? '');
+                formData.append('keywords', JSON.stringify(keywords));
+                
+                const response = await fetch(`/account/uploads/${videoId}?/update`, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                if (response.ok) {
+                    await invalidateAll();
+                }
+            } catch (err) {
+                console.error('Error auto-saving title:', err);
+            }
         }
     }
 
@@ -808,7 +832,7 @@ function deriveThumbnailUrlFromStreamUrl(streamUrl: string): string {
 
             </div>
 
-            <input type="hidden" name="title" value={title} />
+            <input type="hidden" name="title" value={title || ""} />
             <input type="hidden" name="latitude" value={latitude ?? ""} />
             <input type="hidden" name="longitude" value={longitude ?? ""} />
             <input type="hidden" name="keywords" value={JSON.stringify(keywords)} />
@@ -826,6 +850,34 @@ function deriveThumbnailUrlFromStreamUrl(streamUrl: string): string {
                         <span>Save Changes</span>
                     {/if}
                 </button>
+                <button 
+                    type="button" 
+                    class="btn btn-danger" 
+                    style="background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.3); color: rgb(252, 165, 165);"
+                    onclick={async () => {
+                        if (!confirm('Are you sure you want to delete this video? This cannot be undone.')) {
+                            return;
+                        }
+                        try {
+                            const formData = new FormData();
+                            const response = await fetch(`/account/uploads/${videoId}?/deleteVideo`, {
+                                method: 'POST',
+                                body: formData
+                            });
+                            if (response.ok) {
+                                await invalidateAll();
+                                goto('/account/uploads');
+                            }
+                        } catch (err) {
+                            console.error('Error deleting video:', err);
+                        }
+                    }}
+                >
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                        <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2M10 11v6M14 11v6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                    Delete video
+                </button>
             </div>
         {:else if activeTab === 'assets'}
             <div class="section">
@@ -839,6 +891,14 @@ function deriveThumbnailUrlFromStreamUrl(streamUrl: string): string {
                                 <source src={videoUrl} type="application/x-mpegURL" />
                                 <track kind="captions" />
                             </video>
+                            {#if downloadUrl}
+                                <a href={downloadUrl} target="_blank" rel="noopener noreferrer" class="btn btn-secondary" style="margin-top: 1rem; display: inline-flex; align-items: center; gap: 0.5rem;">
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                    </svg>
+                                    Download original file
+                                </a>
+                            {/if}
                         </div>
                         <div class="video-metadata">
                             <div class="metadata-item">
@@ -852,15 +912,6 @@ function deriveThumbnailUrlFromStreamUrl(streamUrl: string): string {
                             <div class="metadata-item">
                                 <span class="metadata-label">Format</span>
                                 <span class="metadata-value">{format ? format.toUpperCase() : 'Unknown'}</span>
-                            </div>
-                 
-                            <div class="metadata-item">
-                                <span class="metadata-label">Download</span>
-                                {#if downloadUrl}
-                                    <a class="metadata-link" href={downloadUrl} target="_blank" rel="noopener noreferrer">Original file</a>
-                                {:else}
-                                    <span class="metadata-value">Unavailable</span>
-                                {/if}
                             </div>
                             <div class="metadata-item">
                                 <span class="metadata-label">Created</span>
@@ -1160,6 +1211,7 @@ function deriveThumbnailUrlFromStreamUrl(streamUrl: string): string {
             </div>
         {/if}
     </form>
+    
 </div>
 </div>
 
@@ -1917,6 +1969,8 @@ function deriveThumbnailUrlFromStreamUrl(streamUrl: string): string {
     .form-actions {
         display: flex;
         justify-content: flex-end;
+        gap: 1rem;
+        align-items: center;
         padding-top: 0rem;
     }
 

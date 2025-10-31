@@ -533,7 +533,6 @@
     }
     .video-container {
         cursor: default;
-        object-fit: cover;
         width: 100%;
         height: 100%;
         position: absolute;
@@ -601,9 +600,7 @@
         --media-primary-color: lightpink;
         --media-secondary-color: rgb(27 54 93 / 0.85);
         --media-control-hover-background: rgb(128 0 0 / 0.85);
-        --media-object-fit: cover;
-        --media-object-position: center;
-        object-fit: cover;
+  
         width: 100%;
         height: 100%;
     }
@@ -615,7 +612,7 @@
     :global(hls-video) {
         width: 100% !important;
         height: 100% !important;
-        object-fit: cover;
+       
     }
     .mute-toggle-button:hover {
         transform: scale(1.05);

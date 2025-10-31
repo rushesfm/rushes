@@ -385,7 +385,6 @@
     :global(#video-aspect-container video) {
         width: 100% !important;
         height: 100% !important;
-        object-fit: contain !important;
         display: block;
         position: relative;
         margin: 0;

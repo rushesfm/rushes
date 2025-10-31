@@ -47,27 +47,27 @@
 
     // Use actual video element duration when available, fall back to database duration
     const effectiveDuration = $derived(
-        videoEl && videoEl.duration > 0
-            ? Math.floor(videoEl.duration)
-            : (currentVideo?.duration ?? 0),
+        duration > 0
+            ? duration
+            : videoEl && videoEl.duration > 0
+                ? Math.floor(videoEl.duration)
+                : (currentVideo?.duration ?? 0),
     );
 
     // Reset and re-attach video when video ID changes
     $effect(() => {
         const videoId = currentVideoId;
-        // Reset duration and current time when video ID changes
-        duration = 0;
+        const fallbackDuration = currentVideo?.duration ?? 0;
+        duration = fallbackDuration;
         currentTime = 0;
-        updateDuration(0);
+        updateDuration(fallbackDuration);
         updateCurrentTime(0);
         
         // Give the DOM time to update, then find and attach new video element
         if (browser) {
             tick().then(() => {
                 const found = findVideo();
-                if (found !== videoEl) {
-                    attachVideo(found);
-                }
+                attachVideo(found);
             });
         }
     });
@@ -163,9 +163,9 @@
         videoEl = v;
 
         // Reset duration and current time when attaching a new video element
-        duration = 0;
+        duration = currentVideo?.duration ?? 0;
         currentTime = 0;
-        updateDuration(0);
+        updateDuration(duration);
         updateCurrentTime(0);
 
         // Create listener functions

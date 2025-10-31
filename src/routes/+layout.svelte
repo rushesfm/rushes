@@ -57,7 +57,7 @@
     // Use a default 16:9 ratio if no aspect ratio is available to prevent jumping
     const effectiveAspectRatio = $derived(videoAspectRatio ?? 16/9);
     const aspectRatioStyle = $derived(
-        `padding-bottom: ${(1 / effectiveAspectRatio) * 100}%`
+        `aspect-ratio: ${effectiveAspectRatio}; padding-bottom: ${(1 / effectiveAspectRatio) * 100}%`
     );
 
     // VideoInfo data logic (from VideoInfoContainer)
@@ -363,6 +363,8 @@
         contain: layout style paint;
         overflow: hidden;
         transition: padding-bottom 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+        transform: translateZ(0);
+        will-change: padding-bottom;
     }
     
     :global(#video-aspect-container .video-container) {

@@ -35,6 +35,7 @@
         onPlay: () => void;
         onPause: () => void;
         onLoaded: () => void;
+        onDurationChange: () => void;
     } | null = null;
 
     const playlist = $derived($videosStore);
@@ -51,14 +52,32 @@
             : (currentVideo?.duration ?? 0),
     );
 
+    // Reset and re-attach video when video ID changes
     $effect(() => {
-        if (currentVideo) {
-            duration = currentVideo.duration ?? 0;
-            // Generate waveform when video changes (fewer bars for simpler look)
-            waveformData = generateMockWaveform(60, duration);
-        } else if (duration > 0) {
-            // Fallback: generate waveform even if currentVideo is not available
-            waveformData = generateMockWaveform(60, duration);
+        const videoId = currentVideoId;
+        // Reset duration and current time when video ID changes
+        duration = 0;
+        currentTime = 0;
+        updateDuration(0);
+        updateCurrentTime(0);
+        
+        // Give the DOM time to update, then find and attach new video element
+        if (browser) {
+            tick().then(() => {
+                const found = findVideo();
+                if (found !== videoEl) {
+                    attachVideo(found);
+                }
+            });
+        }
+    });
+
+    // Update waveform when effective duration changes (use actual video duration)
+    $effect(() => {
+        const dur = effectiveDuration;
+        if (dur > 0) {
+            // Generate waveform based on actual video duration, not database duration
+            waveformData = generateMockWaveform(60, dur);
         }
     });
 
@@ -143,6 +162,12 @@
         if (!v) return;
         videoEl = v;
 
+        // Reset duration and current time when attaching a new video element
+        duration = 0;
+        currentTime = 0;
+        updateDuration(0);
+        updateCurrentTime(0);
+
         // Create listener functions
         const onTime = () => {
             // when not dragging or scrubbing, update currentTime so UI reflects playback
@@ -151,10 +176,14 @@
                 currentTime = time;
                 updateCurrentTime(time);
             }
-            if (videoEl && videoEl.duration > 0) {
+            // Update duration from video element (source of truth)
+            if (videoEl && videoEl.duration > 0 && isFinite(videoEl.duration)) {
                 const dur = Math.floor(videoEl.duration);
-                duration = dur;
-                updateDuration(dur);
+                // Always update duration when video element reports it (even if close to current)
+                if (Math.abs(duration - dur) > 0.5 || duration === 0) {
+                    duration = dur;
+                    updateDuration(dur);
+                }
             }
         };
 
@@ -171,7 +200,17 @@
         };
 
         const onLoaded = () => {
-            if (videoEl && videoEl.duration > 0) {
+            // Update duration from video element when metadata loads (source of truth)
+            if (videoEl && videoEl.duration > 0 && isFinite(videoEl.duration)) {
+                const dur = Math.floor(videoEl.duration);
+                duration = dur;
+                updateDuration(dur);
+            }
+        };
+
+        const onDurationChange = () => {
+            // Update duration when duration changes (e.g., HLS stream updates)
+            if (videoEl && videoEl.duration > 0 && isFinite(videoEl.duration)) {
                 const dur = Math.floor(videoEl.duration);
                 duration = dur;
                 updateDuration(dur);
@@ -179,18 +218,20 @@
         };
 
         // Store listeners in component scope
-        currentListeners = { onTime, onPlay, onPause, onLoaded };
+        currentListeners = { onTime, onPlay, onPause, onLoaded, onDurationChange };
 
         videoEl.addEventListener("timeupdate", onTime);
         videoEl.addEventListener("play", onPlay);
         videoEl.addEventListener("pause", onPause);
         videoEl.addEventListener("loadedmetadata", onLoaded);
+        videoEl.addEventListener("durationchange", onDurationChange);
 
         // initialize state
         const time = videoEl.currentTime || 0;
         currentTime = time;
         updateCurrentTime(time);
-        if (videoEl && videoEl.duration > 0) {
+        // Initialize duration from video element (source of truth)
+        if (videoEl && videoEl.duration > 0 && isFinite(videoEl.duration)) {
             const dur = Math.floor(videoEl.duration);
             duration = dur;
             updateDuration(dur);
@@ -211,10 +252,17 @@
             "loadedmetadata",
             currentListeners.onLoaded,
         );
+        videoEl.removeEventListener("durationchange", currentListeners.onDurationChange);
 
         stopRafLoop();
         currentListeners = null;
         videoEl = null;
+        
+        // Reset duration and current time when detaching
+        duration = 0;
+        currentTime = 0;
+        updateDuration(0);
+        updateCurrentTime(0);
     }
 
     function startRafLoop() {
@@ -224,11 +272,15 @@
                 const time = videoEl.currentTime;
                 currentTime = time;
                 updateCurrentTime(time);
-                const dur = videoEl.duration
-                    ? Math.floor(videoEl.duration)
-                    : duration;
-                duration = dur;
-                updateDuration(dur);
+                // Always use video element's actual duration when available
+                if (videoEl.duration > 0) {
+                    const dur = Math.floor(videoEl.duration);
+                    // Only update if duration changed significantly (to avoid constant updates)
+                    if (Math.abs(duration - dur) > 1) {
+                        duration = dur;
+                        updateDuration(dur);
+                    }
+                }
             }
             rafId = requestAnimationFrame(loop);
         };
@@ -349,12 +401,14 @@
             observer = new MutationObserver(() => {
                 const found = findVideo();
                 if (found !== videoEl) {
+                    // Video element changed - reset and attach new one
                     attachVideo(found);
                 }
             });
-            // Only observe the specific container, not subtree to reduce overhead
-            observer.observe(container, { childList: true, subtree: false });
+            // Observe subtree to catch video element changes
+            observer.observe(container, { childList: true, subtree: true });
         }
+
     });
 
     onDestroy(() => {

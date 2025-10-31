@@ -25,6 +25,7 @@
     let isHovering = $state(false);
     let isPaused = $state(true);
     let userUnmutedOnce = $state(false); // Track if user has manually unmuted
+    let actualDuration = $state(0); // Track actual video element duration
     const playlist = $derived($videosStore);
     const currentVideoId = $derived($selectedVideo.id);
     const currentIndex = $derived(
@@ -171,6 +172,23 @@
             });
             player.addEventListener("ended", handleVideoEnded);
             player.addEventListener("canplay", attemptAutoplay);
+            player.addEventListener("loadedmetadata", () => {
+                // Update actual duration from video element when metadata loads
+                if (player && player.duration > 0) {
+                    actualDuration = Math.floor(player.duration);
+                }
+            });
+            player.addEventListener("durationchange", () => {
+                // Update actual duration when duration changes
+                if (player && player.duration > 0) {
+                    actualDuration = Math.floor(player.duration);
+                }
+            });
+
+            // Initialize duration from video element if available
+            if (player && player.duration > 0) {
+                actualDuration = Math.floor(player.duration);
+            }
 
             isPaused = player.paused;
         }
@@ -416,15 +434,16 @@
         <!-- Bottom controls area with timeline and playback controls -->
         <div class="absolute bottom-0 left-0 right-0 pointer-events-auto">
             <!-- Video title and duration above timeline -->
-            {#if title || duration > 0}
+            {#if title || actualDuration > 0 || duration > 0}
                 <div class="px-6 pb-2">
                     <div class="flex items-center justify-between gap-4">
                         {#if title}
                             <h3 class="text-sm font-semibold text-white truncate">{title}</h3>
                         {/if}
-                        {#if duration > 0}
+                        {#if actualDuration > 0 || duration > 0}
+                            {@const displayDuration = actualDuration > 0 ? actualDuration : duration}
                             <span class="text-xs text-white/80 font-mono whitespace-nowrap">
-                                {Math.floor(duration / 60)}:{(duration % 60).toString().padStart(2, "0")}
+                                {Math.floor(displayDuration / 60)}:{(displayDuration % 60).toString().padStart(2, "0")}
                             </span>
                         {/if}
                     </div>

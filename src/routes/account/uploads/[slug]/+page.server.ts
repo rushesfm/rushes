@@ -1,6 +1,6 @@
 import type { PageServerLoad, Actions } from './$types';
 import { createSupabaseServerClient } from '$lib/supabase/server';
-import { getDb } from '$lib/server/db';
+import { getDb, getDatabaseUrl } from '$lib/server/db';
 import { getVideoById, updateVideo, updateVideoTags } from '$lib/server/db/videos';
 import { ensureUserForAuth } from '$lib/server/db/users';
 import { error, fail, redirect } from '@sveltejs/kit';
@@ -66,7 +66,7 @@ export const load: PageServerLoad = async (event) => {
 
     console.log('[Edit Page Load] User authenticated:', user.id);
 
-    const databaseUrl = platform?.env?.DATABASE_URL ?? process.env.DATABASE_URL;
+    const databaseUrl = getDatabaseUrl(platform?.env) ?? process.env.DATABASE_URL;
     if (!databaseUrl) {
       console.error('[Edit Page Load] Database URL not configured');
       throw error(500, 'Database not configured');
@@ -197,7 +197,7 @@ export const actions: Actions = {
       return fail(401, { error: 'You must be signed in to update videos.' });
     }
 
-    const databaseUrl = platform?.env?.DATABASE_URL ?? process.env.DATABASE_URL;
+    const databaseUrl = getDatabaseUrl(platform?.env) ?? process.env.DATABASE_URL;
     if (!databaseUrl) {
       return fail(500, { error: 'Database not configured.' });
     }
@@ -303,7 +303,7 @@ export const actions: Actions = {
       return fail(401, { error: 'You must be signed in to delete videos.' });
     }
 
-    const databaseUrl = platform?.env?.DATABASE_URL ?? process.env.DATABASE_URL;
+    const databaseUrl = getDatabaseUrl(platform?.env) ?? process.env.DATABASE_URL;
     if (!databaseUrl) {
       return fail(500, { error: 'Database not configured.' });
     }

@@ -1,6 +1,6 @@
 import type { PageServerLoad, Actions } from './$types';
 import { createSupabaseServerClient } from '$lib/supabase/server';
-import { getDb } from '$lib/server/db';
+import { getDb, getDatabaseUrl } from '$lib/server/db';
 import { ensureUserForAuth } from '$lib/server/db/users';
 import { users, videos } from '$lib/server/db/schema';
 import { eq } from 'drizzle-orm';
@@ -29,7 +29,7 @@ export const load: PageServerLoad = async (event) => {
 		throw redirect(303, '/account?redirectTo=/account/edit');
 	}
 
-	const databaseUrl = event.platform?.env?.DATABASE_URL ?? process.env.DATABASE_URL;
+	const databaseUrl = getDatabaseUrl(event.platform?.env) ?? process.env.DATABASE_URL;
 	if (!databaseUrl) {
 		throw error(500, 'Database not configured');
 	}
@@ -62,7 +62,7 @@ export const actions: Actions = {
 			return fail(401, { error: 'You must be signed in to update your profile' });
 		}
 
-		const databaseUrl = event.platform?.env?.DATABASE_URL ?? process.env.DATABASE_URL;
+		const databaseUrl = getDatabaseUrl(event.platform?.env) ?? process.env.DATABASE_URL;
 		if (!databaseUrl) {
 			return fail(500, { error: 'Database not configured' });
 		}
@@ -297,7 +297,7 @@ export const actions: Actions = {
 			return fail(401, { error: 'You must be signed in to delete your account' });
 		}
 
-		const databaseUrl = event.platform?.env?.DATABASE_URL ?? process.env.DATABASE_URL;
+		const databaseUrl = getDatabaseUrl(event.platform?.env) ?? process.env.DATABASE_URL;
 		if (!databaseUrl) {
 			return fail(500, { error: 'Database not configured' });
 		}

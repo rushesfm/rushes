@@ -189,12 +189,33 @@ type DbUser = typeof users.$inferSelect;
 
 export async function ensureUserForAuth(db: DrizzleDb, authUser: SupabaseAuthUser): Promise<DbUser> {
     const authId = authUser.id;
-    const [existing] = await db
-        .select()
-        .from(users)
-        .where(eq(users.authId, authId))
-        .limit(1)
-        .execute();
+    let existing: DbUser | undefined;
+    try {
+        const rows = await db
+            .select()
+            .from(users)
+            .where(eq(users.authId, authId))
+            .limit(1)
+            .execute();
+        existing = rows[0];
+    } catch (err) {
+        console.error('[ensureUserForAuth] lookup failed:', err);
+        if (err instanceof Error) {
+            const cause = (err as Error & { cause?: any }).cause;
+            if (cause) {
+                console.error('[ensureUserForAuth] lookup failure details:', {
+                    message: cause?.message,
+                    name: cause?.name,
+                    code: cause?.code,
+                    detail: cause?.detail,
+                    schema: cause?.schema,
+                    table: cause?.table,
+                    column: cause?.column
+                });
+            }
+        }
+        throw err;
+    }
 
     if (existing) {
         return existing;

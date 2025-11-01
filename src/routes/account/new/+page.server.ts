@@ -2,7 +2,7 @@
 
 import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
-import { getDb } from '$lib/server/db';
+import { getDb, getDatabaseUrl } from '$lib/server/db';
 import { videos } from '$lib/server/db/schema';
 import { nanoid } from 'nanoid';
 import { createSupabaseServerClient } from '$lib/supabase/server';
@@ -39,7 +39,7 @@ export const load: PageServerLoad = async (event) => {
 		throw redirect(303, `/account?redirectTo=${redirectTo}`);
 	}
 
-	const databaseUrl = event.platform?.env?.DATABASE_URL;
+	const databaseUrl = getDatabaseUrl(event.platform?.env);
 	if (!databaseUrl) {
 		console.error('DATABASE_URL binding not found in load()');
 		return {
@@ -78,7 +78,7 @@ export const actions: Actions = {
 			return fail(401, { error: 'You must be signed in to upload videos.' });
 		}
 
-		const databaseUrl = event.platform?.env?.DATABASE_URL;
+		const databaseUrl = getDatabaseUrl(event.platform?.env);
 		if (!databaseUrl) {
 			console.error('DATABASE_URL binding not found in action()');
 			return fail(500, { error: 'Database not configured.' });

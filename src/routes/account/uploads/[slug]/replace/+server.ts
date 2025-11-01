@@ -1,7 +1,7 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { createSupabaseServerClient } from '$lib/supabase/server';
-import { getDb } from '$lib/server/db';
+import { getDb, getDatabaseUrl } from '$lib/server/db';
 import { ensureUserForAuth } from '$lib/server/db/users';
 import { updateVideo } from '$lib/server/db/videos';
 import { videos } from '$lib/server/db/schema';
@@ -20,7 +20,7 @@ export const POST: RequestHandler = async (event) => {
 		throw error(401, 'You must be signed in to update videos.');
 	}
 
-	const databaseUrl = platform?.env?.DATABASE_URL ?? process.env.DATABASE_URL;
+	const databaseUrl = getDatabaseUrl(platform?.env) ?? process.env.DATABASE_URL;
 	if (!databaseUrl) {
 		throw error(500, 'Database not configured.');
 	}

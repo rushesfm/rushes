@@ -1,6 +1,6 @@
 import type { PageServerLoad, Actions } from './$types';
 import { createSupabaseServerClient } from '$lib/supabase/server';
-import { getDb } from '$lib/server/db';
+import { getDb, getDatabaseUrl } from '$lib/server/db';
 import { getVideosByUserId, getVideoById } from '$lib/server/db/videos';
 import { ensureUserForAuth } from '$lib/server/db/users';
 import { fail, redirect } from '@sveltejs/kit';
@@ -13,7 +13,7 @@ export const load: PageServerLoad = async (event) => {
 		data: { user },
 		error
 	} = await supabase.auth.getUser();
-	const databaseUrl = event.platform?.env?.DATABASE_URL ?? process.env.DATABASE_URL;
+	const databaseUrl = getDatabaseUrl(event.platform?.env) ?? process.env.DATABASE_URL;
 	let db: ReturnType<typeof getDb> | null = null;
 	if (databaseUrl) {
 		db = getDb(databaseUrl);
@@ -49,7 +49,7 @@ export const actions: Actions = {
 			return fail(401, { error: 'You must be signed in to delete videos.' });
 		}
 
-		const databaseUrl = event.platform?.env?.DATABASE_URL ?? process.env.DATABASE_URL;
+		const databaseUrl = getDatabaseUrl(event.platform?.env) ?? process.env.DATABASE_URL;
 		if (!databaseUrl) {
 			return fail(500, { error: 'Database not configured.' });
 		}

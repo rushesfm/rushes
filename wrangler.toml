@@ -1,6 +1,13 @@
-# This file configures your Cloudflare Pages project
 name = "rushes"
-compatibility_date = "2024-04-05" # Use a recent date
+pages_build_output_dir = ".svelte-kit/cloudflare"
+compatibility_date = "2025-10-22"
+compatibility_flags = ["nodejs_als", "nodejs_compat"]
 
-# This is the line that fixes the error
-compatibility_flags = ["nodejs_compat"]
+[observability]
+enabled = true
+
+[vars]
+PUBLIC_SUPABASE_URL = "https://jmpxnpndvgbbtmvfribf.supabase.co"
+PUBLIC_SUPABASE_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImptcHhucG5kdmdiYnRtdmZyaWJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTk3NTgyMzksImV4cCI6MjA3NTMzNDIzOX0.YFxW3EzucGfo9QSlH0Pcq44hjpXVHH3MDnCYUQj4Im0"
+BUNNY_CDN_HOST_NAME = "vz-28fef2ae-79e.b-cdn.net"
+BUNNY_VIDEO_LIBRARY_ID = "346385"

@@ -3,16 +3,17 @@
 import type { LayoutServerLoad } from './$types';
 import { getAllVideos } from '$lib/server/db/videos';
 import { getAllUsers } from '$lib/server/db/users';
-import { getDb } from '$lib/server/db'; // <-- Import your factory function
+import { getDb, getDatabaseUrl } from '$lib/server/db'; // <-- Import your factory function
 
 const DATABASE_TIMEOUT_MS = 10000;
 
 export const load: LayoutServerLoad = async ({ platform }) => {
 	console.log('--- LAYOUT SERVER LOAD START ---');
 
-	const databaseUrl = platform?.env?.DATABASE_URL;
+	// Get Hyperdrive connection string or fallback to DATABASE_URL
+	const databaseUrl = getDatabaseUrl(platform?.env) ?? process.env.DATABASE_URL;
 	if (!databaseUrl) {
-		console.error('Failed to load: DATABASE_URL binding not found.');
+		console.error('Failed to load: Database binding not found.');
 		return { videos: [], users: [], error: 'Database not configured.' };
 	}
 
@@ -44,6 +45,42 @@ export const load: LayoutServerLoad = async ({ platform }) => {
 		};
 	} catch (error) {
 		console.error('Failed to load initial data:', error);
+		if (error instanceof Error) {
+			console.error('Failed to load initial data (details):', {
+				message: error.message,
+				name: error.name,
+				stack: error.stack,
+				cause: (error as Error & { cause?: unknown }).cause
+			});
+			const cause = (error as Error & { cause?: any }).cause;
+			if (cause) {
+				console.error('Failed to load initial data (cause details):', {
+					message: cause?.message,
+					name: cause?.name,
+					code: cause?.code,
+					detail: cause?.detail,
+					schema: cause?.schema,
+					table: cause?.table,
+					column: cause?.column
+				});
+			}
+			try {
+				console.error('Failed to load initial data (json):', JSON.stringify({
+					message: error.message,
+					name: error.name,
+					cause
+				}));
+			} catch {
+				// ignore JSON serialization errors
+			}
+		} else {
+			console.error('Failed to load initial data (non-error):', error);
+			try {
+				console.error('Failed to load initial data (non-error json):', JSON.stringify(error));
+			} catch {
+				// ignore JSON serialization errors
+			}
+		}
 		return {
 			videos: [],
 			users: [],

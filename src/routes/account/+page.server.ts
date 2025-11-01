@@ -2,7 +2,7 @@ import { fail, redirect } from '@sveltejs/kit';
 import type { Actions, PageServerLoad } from './$types';
 import { createSupabaseServerClient } from '$lib/supabase/server';
 import { inviteCodesEnabled, validateInviteCode } from '$lib/server/invite-codes';
-import { getDb } from '$lib/server/db';
+import { getDb, getDatabaseUrl } from '$lib/server/db';
 import { getVideoById, getVideosByUserId } from '$lib/server/db/videos';
 import { ensureUserForAuth } from '$lib/server/db/users';
 
@@ -40,7 +40,7 @@ const requestUrl = event.url;
 const redirectTo = resolveRedirectTarget(requestUrl, requestUrl.searchParams.get('redirectTo'));
 const highlightedVideoId = requestUrl.searchParams.get('uploaded');
 
-const databaseUrl = event.platform?.env?.DATABASE_URL ?? process.env.DATABASE_URL;
+const databaseUrl = getDatabaseUrl(event.platform?.env) ?? process.env.DATABASE_URL;
 let db: ReturnType<typeof getDb> | null = null;
 if (databaseUrl) {
 	try {
@@ -219,7 +219,7 @@ export const actions: Actions = {
 		if (!videoId) return fail(400, { delete: { message: 'No video ID provided' } });
 		const supabase = createSupabaseServerClient(event);
 		const { data: { user } } = await supabase.auth.getUser();
-		const databaseUrl = event.platform?.env?.DATABASE_URL ?? process.env.DATABASE_URL;
+		const databaseUrl = getDatabaseUrl(event.platform?.env) ?? process.env.DATABASE_URL;
 		if (!databaseUrl) return fail(500, { delete: { message: 'No DB connection' } });
 		const db = getDb(databaseUrl);
 		const cdnHostname = event.platform?.env?.BUNNY_CDN_HOST_NAME ?? process.env.BUNNY_CDN_HOST_NAME ?? null;

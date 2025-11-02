@@ -27,17 +27,31 @@
   const props = $props() as Props;
 
   let locations = $state<Location[]>(props.locations ?? []);
-  let initialCenterLat = $state(props.initialCenterLat ?? 0);
-  let initialCenterLon = $state(props.initialCenterLon ?? 0);
-  let initialZoom = $state(props.initialZoom ?? 2);
   let activeVideoId = $state(props.activeVideoId ?? null);
 
   $effect(() => {
     locations = props.locations ?? [];
-    initialCenterLat = props.initialCenterLat ?? 0;
-    initialCenterLon = props.initialCenterLon ?? 0;
-    initialZoom = props.initialZoom ?? 2;
     activeVideoId = props.activeVideoId ?? null;
+  });
+  
+  // Calculate initial center and zoom based on active video location
+  const initialCenter = $derived.by(() => {
+    const defaultLat = props.initialCenterLat ?? 0;
+    const defaultLon = props.initialCenterLon ?? 0;
+    const defaultZoom = props.initialZoom ?? 2;
+    
+    if (activeVideoId) {
+      const location = locations.find((loc) => loc.videoId === activeVideoId);
+      if (location) {
+        const coords = normaliseCoordinates(location);
+        if (coords) {
+          const [lon, lat] = coords;
+          return { lon, lat, zoom: 9 }; // Start zoomed in on the marker
+        }
+      }
+    }
+    
+    return { lon: defaultLon, lat: defaultLat, zoom: defaultZoom };
   });
 
 	let container = $state<HTMLDivElement | null>(null);
@@ -46,6 +60,8 @@
 	let mapError = $state<string | null>(null);
 	let mapReady = $state(false);
 	let lastFocusedVideoId = $state<string | null>(null);
+	let hasInitialZoomed = $state(false);
+	let isInitialLoad = $state(true);
 
 	const token =
 		import.meta.env.PUBLIC_MAPBOX_ACCESS_TOKEN ??
@@ -98,9 +114,22 @@
 			const [lon, lat] = coords;
 			const Mapbox = mapboxModule;
 			if (!Mapbox) continue;
-			const marker = new Mapbox.Marker({ color: '#f59e0b' })
-				.setLngLat([lon, lat]);
+			
+			// Use different color for active/playing video
+			const isActive = activeVideoId && loc.videoId === activeVideoId;
+			const markerColor = isActive ? '#fb923c' : '#f59e0b'; // Orange for active, amber for others
+			const markerSize = isActive ? 1.5 : 1; // Larger for active
+			
+			const marker = new Mapbox.Marker({ 
+				color: markerColor,
+				scale: markerSize
+			}).setLngLat([lon, lat]);
+			
 			const popupContent: string[] = [];
+			// Add playing indicator to popup if active
+			if (isActive) {
+				popupContent.push('<div style="color: #fb923c; font-weight: 600; margin-bottom: 4px;">▶ Now Playing</div>');
+			}
 			// Sanitize all user-provided content
 			if (loc.setting || loc.name) {
 				popupContent.push(`<strong>${escapeHtml(loc.setting ?? loc.name ?? '')}</strong>`);
@@ -138,19 +167,10 @@
 	const coords = normaliseCoordinates(location);
 	if (!coords) return;
 	const [lon, lat] = coords;
-	const targetZoom = Math.max(map.getZoom(), initialZoom, 10);
-	if (instant) {
-		map.jumpTo({ center: [lon, lat], zoom: targetZoom });
-	} else if (force || videoId !== lastFocusedVideoId) {
-		map.flyTo({
-			center: [lon, lat],
-			zoom: targetZoom,
-			speed: 0.9,
-			curve: 1.4,
-			easing: (t) => 1 - Math.pow(1 - t, 3),
-			essential: true
-		});
-	}
+	// Use a fixed target zoom level (10) to prevent zoom accumulation
+	const targetZoom = 10;
+	// Always use instant positioning when video changes (no animation)
+	map.jumpTo({ center: [lon, lat], zoom: targetZoom });
 	lastFocusedVideoId = videoId;
 }
 
@@ -161,6 +181,10 @@
 			return;
 		}
 
+		// Reset initial zoom flag when component mounts (each time map tab is clicked)
+		hasInitialZoomed = false;
+		isInitialLoad = true;
+
 		try {
 			const module = await import('mapbox-gl');
 			mapboxModule = module.default as typeof mapboxgl;
@@ -170,18 +194,39 @@
 				return;
 			}
 			Mapbox.accessToken = token;
+			const center = initialCenter;
 			map = new Mapbox.Map({
 				container,
 				style: mapStyle,
-				center: [initialCenterLon, initialCenterLat],
-				zoom: initialZoom,
+				center: [center.lon, center.lat],
+				zoom: center.zoom,
 				cooperativeGestures: true
 			});
 			map.once('load', () => {
 				mapReady = true;
 				syncMarkers(locations);
+				// Map is already positioned correctly from initial center/zoom, no need to jump
 				if (activeVideoId) {
-					requestAnimationFrame(() => focusOnVideo(activeVideoId, { force: true }));
+					lastFocusedVideoId = activeVideoId;
+				}
+				
+				// Smoothly zoom in 1 level immediately when map shows (each time map tab is clicked)
+				if (map && isInitialLoad) {
+					const currentZoom = map.getZoom();
+					const targetZoom = currentZoom + 1;
+					map.easeTo({
+						zoom: targetZoom,
+						duration: 800,
+						easing: (t) => 1 - Math.pow(1 - t, 3)
+					});
+					// Mark animation as complete after duration
+					setTimeout(() => {
+						hasInitialZoomed = true;
+						isInitialLoad = false;
+					}, 800);
+				} else {
+					hasInitialZoomed = true;
+					isInitialLoad = false;
 				}
 			});
 		} catch (error) {
@@ -197,12 +242,14 @@
 	});
 
 	$effect(() => {
-		if (!mapReady) return;
+		if (!mapReady || !hasInitialZoomed) return; // Wait for initial zoom to complete
 		if (!activeVideoId) {
 			lastFocusedVideoId = null;
+			syncMarkers(locations); // Update markers when no active video
 			return;
 		}
 		focusOnVideo(activeVideoId);
+		syncMarkers(locations); // Update markers when active video changes
 	});
 
 	onDestroy(() => {
@@ -211,6 +258,8 @@
 		map = null;
 		mapReady = false;
 		lastFocusedVideoId = null;
+		hasInitialZoomed = false;
+		isInitialLoad = true;
 	});
 </script>
 

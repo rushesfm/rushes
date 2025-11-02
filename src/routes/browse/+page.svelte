@@ -3,6 +3,7 @@
     import { selectedVideo } from "$lib/stores/selectedVideo";
     import Map from "$lib/components/Map.svelte";
     import MonthCalendar from "$lib/components/MonthCalendar.svelte";
+    import TogglePill from "$lib/components/TogglePill.svelte";
     import { page } from "$app/stores";
 
     const videos = $derived($videosStore);
@@ -18,6 +19,63 @@
     let compactView = $state(true); // Default to compact view
     let listView = $state(false);
     let showMonthCalendarPopup = $state(false);
+    
+    // Filter state for Map tab
+    let mapSearchQuery = $state("");
+    
+    // Format filter options
+    const formatOptions = [
+        {
+            value: "all",
+            icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="2" ry="2"/><path d="M9 2v20M15 2v20"/><path d="M2 9h20M2 15h20"/></svg>`,
+            label: "All formats",
+            ariaLabel: "Show all formats"
+        },
+        {
+            value: "video",
+            icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>`,
+            label: "Video only",
+            ariaLabel: "Video only"
+        },
+        {
+            value: "audio",
+            icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>`,
+            label: "Audio only",
+            ariaLabel: "Audio only"
+        }
+    ];
+    
+    function handleFormatChange(value: string) {
+        selectedFormat = value;
+    }
+    
+    // View mode toggle value
+    const viewMode = $derived(listView ? "list" : "compact");
+    
+    const viewModeOptions = [
+        {
+            value: "compact",
+            icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>`,
+            label: "Compact view",
+            ariaLabel: "Toggle compact view"
+        },
+        {
+            value: "list",
+            icon: `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>`,
+            label: "List view",
+            ariaLabel: "Toggle list view"
+        }
+    ];
+    
+    function handleViewModeChange(value: string) {
+        if (value === "list") {
+            listView = true;
+            compactView = false;
+        } else {
+            listView = false;
+            compactView = true;
+        }
+    }
     
     // Track minimized months
     let minimizedMonths = $state<Set<string>>(new Set());
@@ -171,18 +229,45 @@
 
     const lat = $derived(parseFloat($page.url.searchParams.get('lat') ?? '20'));
     const lon = $derived(parseFloat($page.url.searchParams.get('lon') ?? '0'));
-    const zoom = $derived(parseInt($page.url.searchParams.get('zoom') ?? '2', 10));
+    const zoom = $derived(parseInt($page.url.searchParams.get('zoom') ?? '9', 10)); // Start more zoomed in
 
-    const filteredLocations = $derived(
-        lat && lon
-            ? locations.filter(
-                (loc) =>
-                    Array.isArray(loc.coordinates) &&
-                    Math.abs(loc.coordinates[0] - lat) < 0.1 &&
-                    Math.abs(loc.coordinates[1] - lon) < 0.1
-            )
-            : locations
-    );
+    // Filter locations based on URL params and search query
+    const filteredLocations = $derived.by(() => {
+        let filtered = locations;
+        
+        // First filter by URL params if present
+        if (lat && lon) {
+            filtered = filtered.filter(
+                (loc) => {
+                    const coords = loc.coordinates || 
+                        (loc.longitude !== undefined && loc.latitude !== undefined 
+                            ? [loc.longitude, loc.latitude] 
+                            : null) ||
+                        (loc.mapLon !== undefined && loc.mapLat !== undefined 
+                            ? [loc.mapLon, loc.mapLat] 
+                            : null);
+                    
+                    if (!Array.isArray(coords) || coords.length !== 2) return false;
+                    
+                    return Math.abs(coords[0] - lon) < 0.1 && 
+                           Math.abs(coords[1] - lat) < 0.1;
+                }
+            );
+        }
+        
+        // Then filter by search query if present
+        if (mapSearchQuery.trim()) {
+            const query = mapSearchQuery.toLowerCase();
+            filtered = filtered.filter((loc) => {
+                const setting = (loc.setting || loc.name || '').toLowerCase();
+                const title = (loc.videoTitle || '').toLowerCase();
+                const author = (loc.videoAuthor || '').toLowerCase();
+                return setting.includes(query) || title.includes(query) || author.includes(query);
+            });
+        }
+        
+        return filtered;
+    });
 
     const activeVideoId = $derived($selectedVideo.id);
 
@@ -772,42 +857,11 @@
                         </div>
 
                         <!-- Format Filter (Icon Toggles) -->
-                        <div class="format-filter-group">
-                            <button
-                                onclick={() => (selectedFormat = "all")}
-                                class="format-toggle-btn {selectedFormat === "all" ? "active" : ""}"
-                                aria-label="Show all formats"
-                                title="Show all formats"
-                            >
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                                    <rect x="2" y="2" width="20" height="20" rx="2" ry="2"/>
-                                    <path d="M9 2v20M15 2v20"/>
-                                    <path d="M2 9h20M2 15h20"/>
-                                </svg>
-                            </button>
-                            <button
-                                onclick={() => (selectedFormat = selectedFormat === "video" ? "all" : "video")}
-                                class="format-toggle-btn {selectedFormat === "video" ? "active" : ""}"
-                                aria-label="Video only"
-                                title="Video only"
-                            >
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                                    <polygon points="23 7 16 12 23 17 23 7"/>
-                                    <rect x="1" y="5" width="15" height="14" rx="2" ry="2"/>
-                                </svg>
-                            </button>
-                            <button
-                                onclick={() => (selectedFormat = selectedFormat === "audio" ? "all" : "audio")}
-                                class="format-toggle-btn {selectedFormat === "audio" ? "active" : ""}"
-                                aria-label="Audio only"
-                                title="Audio only"
-                            >
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                                    <polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/>
-                                    <path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/>
-                                </svg>
-                            </button>
-                        </div>
+                        <TogglePill 
+                            options={formatOptions}
+                            value={selectedFormat}
+                            onValueChange={handleFormatChange}
+                        />
 
                         <!-- Month Selector (Pill UI) with Calendar Popup -->
                         {#if availableMonths.length > 0 && selectedMonthYear && selectedMonth}
@@ -866,45 +920,11 @@
                         {/if}
 
                         <!-- View Mode Toggles -->
-                        <div 
-                            class="view-toggle-group"
-                            data-active-index={listView ? "1" : "0"}
-                        >
-                            <!-- Compact View Toggle -->
-                            <button
-                                onclick={() => {
-                                    compactView = !compactView;
-                                    if (compactView) listView = false;
-                                }}
-                                class="filter-item view-toggle {compactView && !listView ? 'active' : ''}"
-                                aria-label="Toggle compact view"
-                                title={compactView ? "Switch to normal view" : "Switch to compact view"}
-                            >
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                                    <rect x="3" y="3" width="7" height="7" rx="1"/>
-                                    <rect x="14" y="3" width="7" height="7" rx="1"/>
-                                    <rect x="3" y="14" width="7" height="7" rx="1"/>
-                                    <rect x="14" y="14" width="7" height="7" rx="1"/>
-                                </svg>
-                            </button>
-                            
-                            <!-- List View Toggle -->
-                            <button
-                                onclick={() => {
-                                    listView = !listView;
-                                    if (listView) compactView = false;
-                                }}
-                                class="filter-item view-toggle {listView ? 'active' : ''}"
-                                aria-label="Toggle list view"
-                                title={listView ? "Switch to grid view" : "Switch to list view"}
-                            >
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
-                                    <line x1="3" y1="12" x2="21" y2="12"/>
-                                    <line x1="3" y1="6" x2="21" y2="6"/>
-                                    <line x1="3" y1="18" x2="21" y2="18"/>
-                                </svg>
-                            </button>
-                        </div>
+                        <TogglePill 
+                            options={viewModeOptions}
+                            value={viewMode}
+                            onValueChange={handleViewModeChange}
+                        />
 
                         <!-- Clear Filters -->
                         {#if selectedFormat !== "all" || indexSearchQuery}
@@ -917,6 +937,49 @@
                             >
                                 Clear Filters
                             </button>
+                        {/if}
+                    </div>
+                </div>
+            {/if}
+
+            <!-- Filter Bar (shown for Map tab) -->
+            {#if activeTab === "map"}
+                <div class="filters-container mb-6">
+                    <div class="filters-row">
+                        <!-- Map Search -->
+                        <div class="filter-item filter-search">
+                            <svg class="filter-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+                                <circle cx="11" cy="11" r="7" />
+                                <line x1="20" y1="20" x2="16.65" y2="16.65" />
+                            </svg>
+                            <input
+                                type="text"
+                                bind:value={mapSearchQuery}
+                                placeholder="Search locations..."
+                                class="filter-input"
+                            />
+                            {#if mapSearchQuery}
+                                <button
+                                    onclick={() => (mapSearchQuery = "")}
+                                    class="filter-clear"
+                                    aria-label="Clear search"
+                                >
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <line x1="18" y1="6" x2="6" y2="18" />
+                                        <line x1="6" y1="6" x2="18" y2="18" />
+                                    </svg>
+                                </button>
+                            {/if}
+                        </div>
+                        
+                        <!-- Playing Indicator -->
+                        {#if activeVideoId}
+                            <div class="filter-item playing-indicator">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <polygon points="5 3 19 12 5 21 5 3" />
+                                </svg>
+                                <span>Playing</span>
+                            </div>
                         {/if}
                     </div>
                 </div>
@@ -1501,9 +1564,10 @@
         padding: 0.5rem 0.75rem;
         transition: all 0.2s ease;
         background: rgba(255, 255, 255, 0.08);
-
+        border-radius: 9999px;
+        border: 1px solid rgba(255, 255, 255, 0.1);
     }
-
+    
     .filter-item:focus-within {
         border-color: rgba(255, 255, 255, 0.2);
         background: rgba(255, 255, 255, 0.08);
@@ -1711,6 +1775,21 @@
         background: rgba(255, 255, 255, 0.15);
         color: white;
         border-color: rgba(255, 255, 255, 0.25);
+    }
+
+    .playing-indicator {
+        background: rgba(251, 146, 60, 0.15);
+        border-color: rgba(251, 146, 60, 0.4);
+        color: rgb(251, 146, 60);
+        display: inline-flex;
+        align-items: center;
+        gap: 0.375rem;
+        font-size: 0.875rem;
+        font-weight: 500;
+    }
+
+    .playing-indicator svg {
+        flex-shrink: 0;
     }
 
     .view-toggle-group {

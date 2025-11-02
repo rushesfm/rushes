@@ -2158,9 +2158,15 @@
     }
 
     .map-breadcrumbs__item {
+        --crumb-bg: rgba(15, 18, 24, 0.55);
+        --crumb-border: rgba(148, 163, 184, 0.38);
+        --crumb-hover-bg: rgba(30, 41, 59, 0.6);
+        --crumb-active-bg: rgba(30, 41, 59, 0.75);
+        --crumb-text: rgba(226, 232, 240, 0.82);
+
         position: relative;
-        background: rgba(17, 24, 39, 0.72);
-        color: rgba(226, 232, 240, 0.82);
+        background: var(--crumb-bg);
+        color: var(--crumb-text);
         padding: 0.55rem 1rem 0.55rem 1.6rem;
         font-size: 0.85rem;
         font-weight: 500;
@@ -2169,6 +2175,9 @@
         cursor: pointer;
         transition: background 0.2s linear, color 0.2s linear;
         text-decoration: none;
+        border-top: 1px solid var(--crumb-border);
+        border-bottom: 1px solid var(--crumb-border);
+        border-left: 1px solid transparent;
     }
 
     .map-breadcrumbs__item::before,
@@ -2184,12 +2193,12 @@
     }
 
     .map-breadcrumbs__item::before {
-        background: rgba(148, 163, 184, 0.35);
+        background: var(--crumb-border);
         margin-left: 1px;
     }
 
     .map-breadcrumbs__item::after {
-        background: rgba(17, 24, 39, 0.72);
+        background: var(--crumb-bg);
         z-index: 1;
     }
 
@@ -2200,11 +2209,12 @@
 
     .map-breadcrumbs__item:first-child {
         padding-left: 1.1rem;
+        border-left-color: var(--crumb-border);
     }
 
     .map-breadcrumbs__item:hover,
     .map-breadcrumbs__item:hover::after {
-        background: rgba(30, 41, 59, 0.8);
+        background: var(--crumb-hover-bg);
         color: white;
     }
 
@@ -2212,7 +2222,7 @@
     .map-breadcrumbs__item:focus-visible::after,
     .map-breadcrumbs__item.is-active,
     .map-breadcrumbs__item.is-active::after {
-        background: rgba(30, 41, 59, 0.9);
+        background: var(--crumb-active-bg);
         color: white;
     }
 

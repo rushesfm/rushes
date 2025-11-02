@@ -1404,27 +1404,54 @@
                     <div class="filters-row">
                         <!-- Map Breadcrumbs -->
                         <nav class="map-breadcrumbs" aria-label="Map location breadcrumbs">
-                            <ol class="map-breadcrumbs-list" role="list">
+                            <ol role="list" class="pky plf plg pli plm plw plx ply map-breadcrumbs-list">
                                 {#each mapBreadcrumbs as crumb, index (crumb.label)}
                                     {@const isLast = index === mapBreadcrumbs.length - 1}
-                                    <li class="map-breadcrumb-item">
-                                        <div class="map-breadcrumb-inner">
+                                    <li class="pky map-breadcrumb-item">
+                                        <div class="pky ple map-breadcrumb-inner">
                                             {#if index > 0}
-                                                <span class="map-breadcrumb-separator" aria-hidden="true">
-                                                    <svg viewBox="0 0 24 44" preserveAspectRatio="none" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
-                                                        <path d="M0.293 0L22.293 22L0.293 44H1.707L23.707 22L1.707 0H0.293Z" />
+                                                <svg
+                                                    viewBox="0 0 24 44"
+                                                    fill="currentColor"
+                                                    preserveAspectRatio="none"
+                                                    aria-hidden="true"
+                                                    class="pla plb pld plt map-breadcrumb-separator"
+                                                >
+                                                    <path d="M.293 0l22 22-22 22h1.414l22-22-22-22H.293z"></path>
+                                                </svg>
+                                                <button
+                                                    type="button"
+                                                    class="pkx plo plp plr plz map-breadcrumb-trigger"
+                                                    class:current={isLast}
+                                                    onclick={() => handleBreadcrumbClick(crumb)}
+                                                    aria-current={isLast ? "page" : undefined}
+                                                >
+                                                    {crumb.label}
+                                                </button>
+                                            {:else}
+                                                <button
+                                                    type="button"
+                                                    class="plr pma map-breadcrumb-trigger root"
+                                                    class:current={isLast}
+                                                    onclick={() => handleBreadcrumbClick(crumb)}
+                                                    aria-current={isLast ? "page" : undefined}
+                                                >
+                                                    <svg
+                                                        viewBox="0 0 20 20"
+                                                        fill="currentColor"
+                                                        data-slot="icon"
+                                                        aria-hidden="true"
+                                                        class="pkz pld map-breadcrumb-home-icon"
+                                                    >
+                                                        <path
+                                                            fill-rule="evenodd"
+                                                            clip-rule="evenodd"
+                                                            d="M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v6a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6H3a1 1 0 0 1-.707-1.707l7-7Z"
+                                                        ></path>
                                                     </svg>
-                                                </span>
+                                                    <span class="pkv map-breadcrumb-label">{crumb.label}</span>
+                                                </button>
                                             {/if}
-                                            <button
-                                                type="button"
-                                                class="map-breadcrumb-link"
-                                                class:current={isLast}
-                                                onclick={() => handleBreadcrumbClick(crumb)}
-                                                aria-current={isLast ? "page" : undefined}
-                                            >
-                                                {crumb.label}
-                                            </button>
                                         </div>
                                     </li>
                                 {/each}
@@ -2162,28 +2189,24 @@
     .map-breadcrumbs {
         display: inline-flex;
         align-items: center;
-        background: rgba(17, 24, 39, 0.72);
-        border: 1px solid rgba(148, 163, 184, 0.25);
-        border-radius: 0.75rem;
-        backdrop-filter: blur(8px);
         padding: 0.35rem 0.6rem;
-        box-shadow: 0 12px 24px -18px rgba(15, 23, 42, 0.85);
+        border-radius: 0.8rem;
+        background: rgba(17, 24, 39, 0.68);
+        border: 1px solid rgba(148, 163, 184, 0.28);
+        box-shadow: 0 14px 32px -22px rgba(15, 23, 42, 0.85);
+        backdrop-filter: blur(8px);
     }
 
     .map-breadcrumbs-list {
         display: inline-flex;
         align-items: center;
-        gap: 0.25rem;
+        gap: 0.35rem;
         list-style: none;
         margin: 0;
         padding: 0;
     }
 
-    .map-breadcrumb-item {
-        display: inline-flex;
-        align-items: center;
-    }
-
+    .map-breadcrumb-item,
     .map-breadcrumb-inner {
         display: inline-flex;
         align-items: center;
@@ -2191,51 +2214,60 @@
     }
 
     .map-breadcrumb-separator {
-        display: inline-flex;
-        align-items: center;
-        justify-content: center;
-        color: rgba(148, 163, 184, 0.45);
         width: 1.5rem;
         height: 1.75rem;
+        color: rgba(148, 163, 184, 0.42);
     }
 
-    .map-breadcrumb-separator svg {
-        width: 100%;
-        height: 100%;
-        display: block;
-    }
-
-    .map-breadcrumb-link {
-        background: rgba(15, 23, 42, 0.55);
-        border: 1px solid rgba(148, 163, 184, 0.18);
-        border-radius: 0.65rem;
-        color: rgba(226, 232, 240, 0.8);
-        font-size: 0.85rem;
-        font-weight: 500;
-        padding: 0.45rem 0.9rem;
-        cursor: pointer;
-        transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
+    .map-breadcrumb-trigger {
         display: inline-flex;
         align-items: center;
+        gap: 0.45rem;
+        background: rgba(15, 23, 42, 0.55);
+        border: 1px solid rgba(148, 163, 184, 0.2);
+        border-radius: 0.65rem;
+        color: rgba(226, 232, 240, 0.82);
+        font-size: 0.85rem;
+        font-weight: 500;
+        padding: 0.45rem 0.95rem;
+        transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+        cursor: pointer;
         outline: none;
     }
 
-    .map-breadcrumb-link:hover,
-    .map-breadcrumb-link:focus-visible {
+    .map-breadcrumb-trigger.root {
+        padding-left: 0.75rem;
+        padding-right: 1rem;
+    }
+
+    .map-breadcrumb-trigger:hover,
+    .map-breadcrumb-trigger:focus-visible {
+        background: rgba(30, 41, 59, 0.78);
         color: white;
-        background: rgba(30, 41, 59, 0.75);
         border-color: rgba(148, 163, 184, 0.45);
     }
 
-    .map-breadcrumb-link.current {
+    .map-breadcrumb-trigger.current {
         color: rgba(226, 232, 240, 0.95);
-        font-weight: 600;
-        background: rgba(30, 41, 59, 0.45);
-        border-color: rgba(148, 163, 184, 0.3);
+        background: rgba(30, 41, 59, 0.5);
+        border-color: rgba(148, 163, 184, 0.34);
+        cursor: default;
     }
 
-    .map-breadcrumb-link.current:focus-visible {
+    .map-breadcrumb-trigger.current:focus-visible {
         color: white;
+    }
+
+    .map-breadcrumb-home-icon {
+        width: 1.1rem;
+        height: 1.1rem;
+        opacity: 0.75;
+    }
+
+    .map-breadcrumb-label {
+        font-size: 0.82rem;
+        font-weight: 600;
+        color: inherit;
     }
 
     .map-places-search {

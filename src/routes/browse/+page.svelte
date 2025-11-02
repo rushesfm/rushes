@@ -2189,7 +2189,7 @@
     .map-breadcrumbs {
         display: inline-flex;
         align-items: center;
-        padding: 0.35rem 0.6rem;
+        padding: 0.25rem 0.5rem;
         border-radius: 0.8rem;
         background: rgba(17, 24, 39, 0.68);
         border: 1px solid rgba(148, 163, 184, 0.28);
@@ -2199,8 +2199,8 @@
 
     .map-breadcrumbs-list {
         display: inline-flex;
-        align-items: center;
-        gap: 0.35rem;
+        align-items: stretch;
+        gap: 0;
         list-style: none;
         margin: 0;
         padding: 0;
@@ -2209,59 +2209,61 @@
     .map-breadcrumb-item,
     .map-breadcrumb-inner {
         display: inline-flex;
-        align-items: center;
-        gap: 0.35rem;
+        align-items: stretch;
+        gap: 0;
+    }
+
+    .map-breadcrumb-inner {
+        height: 100%;
     }
 
     .map-breadcrumb-separator {
-        width: 1.5rem;
-        height: 1.75rem;
-        color: rgba(148, 163, 184, 0.42);
+        width: 1.4rem;
+        height: calc(100% + 0.6rem);
+        color: rgba(148, 163, 184, 0.38);
+        transform: translateX(-0.4rem);
     }
 
     .map-breadcrumb-trigger {
         display: inline-flex;
         align-items: center;
         gap: 0.45rem;
-        background: rgba(15, 23, 42, 0.55);
-        border: 1px solid rgba(148, 163, 184, 0.2);
-        border-radius: 0.65rem;
-        color: rgba(226, 232, 240, 0.82);
+        background: transparent;
+        border: none;
+        color: rgba(226, 232, 240, 0.78);
         font-size: 0.85rem;
         font-weight: 500;
-        padding: 0.45rem 0.95rem;
-        transition: background 0.2s ease, border-color 0.2s ease, color 0.2s ease;
+        padding: 0.45rem 0.85rem;
+        transition: color 0.2s ease, background 0.2s ease;
         cursor: pointer;
         outline: none;
     }
 
+    .map-breadcrumb-trigger:not(.root) {
+        margin-left: 0.4rem;
+    }
+
     .map-breadcrumb-trigger.root {
-        padding-left: 0.75rem;
-        padding-right: 1rem;
+        padding-left: 0.6rem;
+        padding-right: 0.9rem;
     }
 
     .map-breadcrumb-trigger:hover,
     .map-breadcrumb-trigger:focus-visible {
-        background: rgba(30, 41, 59, 0.78);
         color: white;
-        border-color: rgba(148, 163, 184, 0.45);
+        background: rgba(30, 41, 59, 0.38);
+        border-radius: 0.5rem;
     }
 
     .map-breadcrumb-trigger.current {
         color: rgba(226, 232, 240, 0.95);
-        background: rgba(30, 41, 59, 0.5);
-        border-color: rgba(148, 163, 184, 0.34);
-        cursor: default;
-    }
-
-    .map-breadcrumb-trigger.current:focus-visible {
-        color: white;
+        pointer-events: none;
     }
 
     .map-breadcrumb-home-icon {
-        width: 1.1rem;
-        height: 1.1rem;
-        opacity: 0.75;
+        width: 1.05rem;
+        height: 1.05rem;
+        opacity: 0.8;
     }
 
     .map-breadcrumb-label {

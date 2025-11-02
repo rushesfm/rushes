@@ -1403,20 +1403,19 @@
                 <div class="filters-container mb-6">
                     <div class="filters-row">
                         <!-- Map Breadcrumbs -->
-                        <nav class="map-breadcrumbs-wrapper" aria-label="Map location breadcrumbs">
-                            <div class="map-breadcrumbs last">
-                                {#each mapBreadcrumbs as crumb, index (crumb.label)}
-                                    {@const isLast = index === mapBreadcrumbs.length - 1}
-                                    <button
-                                        type="button"
-                                        class="map-breadcrumb"
-                                        onclick={() => handleBreadcrumbClick(crumb)}
-                                        aria-current={isLast ? "page" : undefined}
-                                    >
-                                        {crumb.label}
-                                    </button>
-                                {/each}
-                            </div>
+                        <nav class="map-breadcrumbs" aria-label="Map location breadcrumbs">
+                            {#each mapBreadcrumbs as crumb, index (crumb.label)}
+                                {@const isLast = index === mapBreadcrumbs.length - 1}
+                                <button
+                                    type="button"
+                                    class="map-breadcrumbs__item"
+                                    class:is-active={isLast}
+                                    onclick={() => handleBreadcrumbClick(crumb)}
+                                    aria-current={isLast ? "page" : undefined}
+                                >
+                                    {crumb.label}
+                                </button>
+                            {/each}
                         </nav>
 
                         <!-- Map Search -->
@@ -2147,126 +2146,74 @@
         color: white;
     }
 
-    .map-breadcrumbs-wrapper {
-        display: inline-flex;
-        padding: 0.35rem 0.55rem;
-        border-radius: 0.9rem;
-        background: rgba(15, 18, 24, 0.68);
-        border: 1px solid rgba(148, 163, 184, 0.28);
-        box-shadow: 0 14px 32px -22px rgba(15, 23, 42, 0.85);
-        backdrop-filter: blur(8px);
-    }
-
     .map-breadcrumbs {
-        --map-breadcrumb-border: 1px;
-        --map-breadcrumb-angle: 40deg;
-        --map-breadcrumb-color: rgba(148, 163, 184, 0.65);
-
-        display: flex;
-        color: var(--map-breadcrumb-color);
-    }
-
-    .map-breadcrumb {
-        position: relative;
         display: inline-flex;
         align-items: center;
-        justify-content: center;
-        gap: 0.45rem;
-        line-height: 1.6;
+        border: 1px solid rgba(148, 163, 184, 0.28);
+        border-radius: 0.75rem;
+        overflow: hidden;
+        backdrop-filter: blur(8px);
+        background: rgba(15, 18, 24, 0.55);
+        box-shadow: 0 12px 28px -20px rgba(15, 23, 42, 0.8);
+    }
+
+    .map-breadcrumbs__item {
+        position: relative;
+        background: rgba(17, 24, 39, 0.72);
+        color: rgba(226, 232, 240, 0.82);
+        padding: 0.55rem 1rem 0.55rem 1.6rem;
         font-size: 0.85rem;
         font-weight: 500;
-        color: inherit;
-        background: transparent;
         border: none;
-        cursor: pointer;
-        padding-inline: calc(.5lh * tan(var(--map-breadcrumb-angle)) + var(--map-breadcrumb-border) / cos(var(--map-breadcrumb-angle)));
-        margin-inline-start: calc(-.5lh * tan(var(--map-breadcrumb-angle)) - var(--map-breadcrumb-border) / cos(var(--map-breadcrumb-angle)));
-        text-indent: 0.1em;
-        transition: color 0.2s ease, background 0.2s ease;
-        border-radius: 0;
         outline: none;
+        cursor: pointer;
+        transition: background 0.2s linear, color 0.2s linear;
+        text-decoration: none;
     }
 
-    .map-breadcrumb::before {
+    .map-breadcrumbs__item::before,
+    .map-breadcrumbs__item::after {
         content: "";
         position: absolute;
-        inset: 0;
-        background: var(--map-breadcrumb-color);
-        opacity: 0.28;
-        clip-path: polygon(
-            0 0,
-            calc(100% - .5lh * tan(var(--map-breadcrumb-angle))) 0,
-            100% 50%,
-            calc(100% - .5lh * tan(var(--map-breadcrumb-angle))) 100%,
-            0 100%,
-            calc(.5lh * tan(var(--map-breadcrumb-angle))) 50%,
-            0 0,
-            calc(var(--map-breadcrumb-border) * (tan(var(--map-breadcrumb-angle)) + 1 / cos(var(--map-breadcrumb-angle)))) var(--map-breadcrumb-border),
-            calc(.5lh * tan(var(--map-breadcrumb-angle)) + var(--map-breadcrumb-border) / cos(var(--map-breadcrumb-angle))) 50%,
-            calc(var(--map-breadcrumb-border) * (tan(var(--map-breadcrumb-angle)) + 1 / cos(var(--map-breadcrumb-angle)))) calc(100% - var(--map-breadcrumb-border)),
-            calc(100% - .5lh * tan(var(--map-breadcrumb-angle)) - var(--map-breadcrumb-border) * (1 / cos(var(--map-breadcrumb-angle)) - tan(var(--map-breadcrumb-angle)))) calc(100% - var(--map-breadcrumb-border)),
-            calc(100% - var(--map-breadcrumb-border) / cos(var(--map-breadcrumb-angle))) 50%,
-            calc(100% - .5lh * tan(var(--map-breadcrumb-angle)) - var(--map-breadcrumb-border) * (1 / cos(var(--map-breadcrumb-angle)) - tan(var(--map-breadcrumb-angle)))) var(--map-breadcrumb-border),
-            calc(var(--map-breadcrumb-border) * (tan(var(--map-breadcrumb-angle)) + cos(var(--map-breadcrumb-angle)))) var(--map-breadcrumb-border)
-        );
-        border-radius: 0;
-        pointer-events: none;
+        top: 0;
+        bottom: 0;
+        width: 1em;
+        left: 100%;
+        clip-path: polygon(50% 50%, -50% -50%, 0 100%);
+        transition: background 0.2s linear;
     }
 
-    .map-breadcrumb:first-child {
-        text-indent: 0;
-        padding-inline-start: calc(var(--map-breadcrumb-border) + 0.35rem);
-        margin-inline-start: 0;
+    .map-breadcrumbs__item::before {
+        background: rgba(148, 163, 184, 0.35);
+        margin-left: 1px;
     }
 
-    .map-breadcrumb:first-child::before {
-        clip-path: polygon(
-            0 0,
-            calc(100% - .5lh * tan(var(--map-breadcrumb-angle))) 0,
-            100% 50%,
-            calc(100% - .5lh * tan(var(--map-breadcrumb-angle))) 100%,
-            0 100%,
-            0 0,
-            var(--map-breadcrumb-border) var(--map-breadcrumb-border),
-            var(--map-breadcrumb-border) calc(100% - var(--map-breadcrumb-border)),
-            calc(100% - .5lh * tan(var(--map-breadcrumb-angle)) - var(--map-breadcrumb-border) * (1 / cos(var(--map-breadcrumb-angle)) - tan(var(--map-breadcrumb-angle)))) calc(100% - var(--map-breadcrumb-border)),
-            calc(100% - var(--map-breadcrumb-border) / cos(var(--map-breadcrumb-angle))) 50%,
-            calc(100% - .5lh * tan(var(--map-breadcrumb-angle)) - var(--map-breadcrumb-border) * (1 / cos(var(--map-breadcrumb-angle)) - tan(var(--map-breadcrumb-angle)))) var(--map-breadcrumb-border),
-            var(--map-breadcrumb-border) var(--map-breadcrumb-border)
-        );
+    .map-breadcrumbs__item::after {
+        background: rgba(17, 24, 39, 0.72);
+        z-index: 1;
     }
 
-    .map-breadcrumbs.last .map-breadcrumb:last-child {
-        margin-inline-end: 0;
-        padding-inline-end: calc(var(--map-breadcrumb-border) + 0.35rem);
+    .map-breadcrumbs__item:last-child::before,
+    .map-breadcrumbs__item:last-child::after {
+        display: none;
     }
 
-    .map-breadcrumbs.last .map-breadcrumb:last-child::before {
-        clip-path: polygon(
-            0 0,
-            100% 0,
-            100% 50%,
-            100% 100%,
-            0 100%,
-            calc(.5lh * tan(var(--map-breadcrumb-angle))) 50%,
-            0 0,
-            calc(var(--map-breadcrumb-border) * (tan(var(--map-breadcrumb-angle)) + 1 / cos(var(--map-breadcrumb-angle)))) var(--map-breadcrumb-border),
-            calc(.5lh * tan(var(--map-breadcrumb-angle)) + var(--map-breadcrumb-border) / cos(var(--map-breadcrumb-angle))) 50%,
-            calc(var(--map-breadcrumb-border) * (tan(var(--map-breadcrumb-angle)) + 1 / cos(var(--map-breadcrumb-angle)))) calc(100% - var(--map-breadcrumb-border)),
-            calc(100% - var(--map-breadcrumb-border)) calc(100% - var(--map-breadcrumb-border)),
-            calc(100% - var(--map-breadcrumb-border)) var(--map-breadcrumb-border),
-            calc(var(--map-breadcrumb-border) * (tan(var(--map-breadcrumb-angle)) + cos(var(--map-breadcrumb-angle)))) var(--map-breadcrumb-border)
-        );
+    .map-breadcrumbs__item:first-child {
+        padding-left: 1.1rem;
     }
 
-    .map-breadcrumb:hover,
-    .map-breadcrumb:focus-visible {
-        color: rgba(255, 255, 255, 0.95);
+    .map-breadcrumbs__item:hover,
+    .map-breadcrumbs__item:hover::after {
+        background: rgba(30, 41, 59, 0.8);
+        color: white;
     }
 
-    .map-breadcrumb[aria-current="page"] {
-        color: rgba(226, 232, 240, 0.98);
-        cursor: default;
+    .map-breadcrumbs__item:focus-visible,
+    .map-breadcrumbs__item:focus-visible::after,
+    .map-breadcrumbs__item.is-active,
+    .map-breadcrumbs__item.is-active::after {
+        background: rgba(30, 41, 59, 0.9);
+        color: white;
     }
 
     .map-places-search {

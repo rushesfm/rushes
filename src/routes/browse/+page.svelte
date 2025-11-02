@@ -1403,59 +1403,20 @@
                 <div class="filters-container mb-6">
                     <div class="filters-row">
                         <!-- Map Breadcrumbs -->
-                        <nav class="map-breadcrumbs" aria-label="Map location breadcrumbs">
-                            <ol role="list" class="pky plf plg pli plm plw plx ply map-breadcrumbs-list">
+                        <nav class="map-breadcrumbs-wrapper" aria-label="Map location breadcrumbs">
+                            <div class="map-breadcrumbs last">
                                 {#each mapBreadcrumbs as crumb, index (crumb.label)}
                                     {@const isLast = index === mapBreadcrumbs.length - 1}
-                                    <li class="pky map-breadcrumb-item">
-                                        <div class="pky ple map-breadcrumb-inner">
-                                            {#if index > 0}
-                                                <svg
-                                                    viewBox="0 0 24 44"
-                                                    fill="currentColor"
-                                                    preserveAspectRatio="none"
-                                                    aria-hidden="true"
-                                                    class="pla plb pld plt map-breadcrumb-separator"
-                                                >
-                                                    <path d="M.293 0l22 22-22 22h1.414l22-22-22-22H.293z"></path>
-                                                </svg>
-                                                <button
-                                                    type="button"
-                                                    class="pkx plo plp plr plz map-breadcrumb-trigger"
-                                                    class:current={isLast}
-                                                    onclick={() => handleBreadcrumbClick(crumb)}
-                                                    aria-current={isLast ? "page" : undefined}
-                                                >
-                                                    {crumb.label}
-                                                </button>
-                                            {:else}
-                                                <button
-                                                    type="button"
-                                                    class="plr pma map-breadcrumb-trigger root"
-                                                    class:current={isLast}
-                                                    onclick={() => handleBreadcrumbClick(crumb)}
-                                                    aria-current={isLast ? "page" : undefined}
-                                                >
-                                                    <svg
-                                                        viewBox="0 0 20 20"
-                                                        fill="currentColor"
-                                                        data-slot="icon"
-                                                        aria-hidden="true"
-                                                        class="pkz pld map-breadcrumb-home-icon"
-                                                    >
-                                                        <path
-                                                            fill-rule="evenodd"
-                                                            clip-rule="evenodd"
-                                                            d="M9.293 2.293a1 1 0 0 1 1.414 0l7 7A1 1 0 0 1 17 11h-1v6a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1v-3a1 1 0 0 0-1-1H9a1 1 0 0 0-1 1v3a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1v-6H3a1 1 0 0 1-.707-1.707l7-7Z"
-                                                        ></path>
-                                                    </svg>
-                                                    <span class="pkv map-breadcrumb-label">{crumb.label}</span>
-                                                </button>
-                                            {/if}
-                                        </div>
-                                    </li>
+                                    <button
+                                        type="button"
+                                        class="map-breadcrumb"
+                                        onclick={() => handleBreadcrumbClick(crumb)}
+                                        aria-current={isLast ? "page" : undefined}
+                                    >
+                                        {crumb.label}
+                                    </button>
                                 {/each}
-                            </ol>
+                            </div>
                         </nav>
 
                         <!-- Map Search -->
@@ -2186,90 +2147,126 @@
         color: white;
     }
 
-    .map-breadcrumbs {
+    .map-breadcrumbs-wrapper {
         display: inline-flex;
-        align-items: center;
-        padding: 0.25rem 0.5rem;
-        border-radius: 0.8rem;
-        background: rgba(17, 24, 39, 0.68);
+        padding: 0.35rem 0.55rem;
+        border-radius: 0.9rem;
+        background: rgba(15, 18, 24, 0.68);
         border: 1px solid rgba(148, 163, 184, 0.28);
         box-shadow: 0 14px 32px -22px rgba(15, 23, 42, 0.85);
         backdrop-filter: blur(8px);
     }
 
-    .map-breadcrumbs-list {
-        display: inline-flex;
-        align-items: stretch;
-        gap: 0;
-        list-style: none;
-        margin: 0;
-        padding: 0;
+    .map-breadcrumbs {
+        --map-breadcrumb-border: 1px;
+        --map-breadcrumb-angle: 40deg;
+        --map-breadcrumb-color: rgba(148, 163, 184, 0.65);
+
+        display: flex;
+        color: var(--map-breadcrumb-color);
     }
 
-    .map-breadcrumb-item,
-    .map-breadcrumb-inner {
-        display: inline-flex;
-        align-items: stretch;
-        gap: 0;
-    }
-
-    .map-breadcrumb-inner {
-        height: 100%;
-    }
-
-    .map-breadcrumb-separator {
-        width: 1.4rem;
-        height: calc(100% + 0.6rem);
-        color: rgba(148, 163, 184, 0.38);
-        transform: translateX(-0.4rem);
-    }
-
-    .map-breadcrumb-trigger {
+    .map-breadcrumb {
+        position: relative;
         display: inline-flex;
         align-items: center;
+        justify-content: center;
         gap: 0.45rem;
-        background: transparent;
-        border: none;
-        color: rgba(226, 232, 240, 0.78);
+        line-height: 1.6;
         font-size: 0.85rem;
         font-weight: 500;
-        padding: 0.45rem 0.85rem;
-        transition: color 0.2s ease, background 0.2s ease;
+        color: inherit;
+        background: transparent;
+        border: none;
         cursor: pointer;
+        padding-inline: calc(.5lh * tan(var(--map-breadcrumb-angle)) + var(--map-breadcrumb-border) / cos(var(--map-breadcrumb-angle)));
+        margin-inline-start: calc(-.5lh * tan(var(--map-breadcrumb-angle)) - var(--map-breadcrumb-border) / cos(var(--map-breadcrumb-angle)));
+        text-indent: 0.1em;
+        transition: color 0.2s ease, background 0.2s ease;
+        border-radius: 0;
         outline: none;
     }
 
-    .map-breadcrumb-trigger:not(.root) {
-        margin-left: 0.4rem;
-    }
-
-    .map-breadcrumb-trigger.root {
-        padding-left: 0.6rem;
-        padding-right: 0.9rem;
-    }
-
-    .map-breadcrumb-trigger:hover,
-    .map-breadcrumb-trigger:focus-visible {
-        color: white;
-        background: rgba(30, 41, 59, 0.38);
-        border-radius: 0.5rem;
-    }
-
-    .map-breadcrumb-trigger.current {
-        color: rgba(226, 232, 240, 0.95);
+    .map-breadcrumb::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        background: var(--map-breadcrumb-color);
+        opacity: 0.28;
+        clip-path: polygon(
+            0 0,
+            calc(100% - .5lh * tan(var(--map-breadcrumb-angle))) 0,
+            100% 50%,
+            calc(100% - .5lh * tan(var(--map-breadcrumb-angle))) 100%,
+            0 100%,
+            calc(.5lh * tan(var(--map-breadcrumb-angle))) 50%,
+            0 0,
+            calc(var(--map-breadcrumb-border) * (tan(var(--map-breadcrumb-angle)) + 1 / cos(var(--map-breadcrumb-angle)))) var(--map-breadcrumb-border),
+            calc(.5lh * tan(var(--map-breadcrumb-angle)) + var(--map-breadcrumb-border) / cos(var(--map-breadcrumb-angle))) 50%,
+            calc(var(--map-breadcrumb-border) * (tan(var(--map-breadcrumb-angle)) + 1 / cos(var(--map-breadcrumb-angle)))) calc(100% - var(--map-breadcrumb-border)),
+            calc(100% - .5lh * tan(var(--map-breadcrumb-angle)) - var(--map-breadcrumb-border) * (1 / cos(var(--map-breadcrumb-angle)) - tan(var(--map-breadcrumb-angle)))) calc(100% - var(--map-breadcrumb-border)),
+            calc(100% - var(--map-breadcrumb-border) / cos(var(--map-breadcrumb-angle))) 50%,
+            calc(100% - .5lh * tan(var(--map-breadcrumb-angle)) - var(--map-breadcrumb-border) * (1 / cos(var(--map-breadcrumb-angle)) - tan(var(--map-breadcrumb-angle)))) var(--map-breadcrumb-border),
+            calc(var(--map-breadcrumb-border) * (tan(var(--map-breadcrumb-angle)) + cos(var(--map-breadcrumb-angle)))) var(--map-breadcrumb-border)
+        );
+        border-radius: 0;
         pointer-events: none;
     }
 
-    .map-breadcrumb-home-icon {
-        width: 1.05rem;
-        height: 1.05rem;
-        opacity: 0.8;
+    .map-breadcrumb:first-child {
+        text-indent: 0;
+        padding-inline-start: calc(var(--map-breadcrumb-border) + 0.35rem);
+        margin-inline-start: 0;
     }
 
-    .map-breadcrumb-label {
-        font-size: 0.82rem;
-        font-weight: 600;
-        color: inherit;
+    .map-breadcrumb:first-child::before {
+        clip-path: polygon(
+            0 0,
+            calc(100% - .5lh * tan(var(--map-breadcrumb-angle))) 0,
+            100% 50%,
+            calc(100% - .5lh * tan(var(--map-breadcrumb-angle))) 100%,
+            0 100%,
+            0 0,
+            var(--map-breadcrumb-border) var(--map-breadcrumb-border),
+            var(--map-breadcrumb-border) calc(100% - var(--map-breadcrumb-border)),
+            calc(100% - .5lh * tan(var(--map-breadcrumb-angle)) - var(--map-breadcrumb-border) * (1 / cos(var(--map-breadcrumb-angle)) - tan(var(--map-breadcrumb-angle)))) calc(100% - var(--map-breadcrumb-border)),
+            calc(100% - var(--map-breadcrumb-border) / cos(var(--map-breadcrumb-angle))) 50%,
+            calc(100% - .5lh * tan(var(--map-breadcrumb-angle)) - var(--map-breadcrumb-border) * (1 / cos(var(--map-breadcrumb-angle)) - tan(var(--map-breadcrumb-angle)))) var(--map-breadcrumb-border),
+            var(--map-breadcrumb-border) var(--map-breadcrumb-border)
+        );
+    }
+
+    .map-breadcrumbs.last .map-breadcrumb:last-child {
+        margin-inline-end: 0;
+        padding-inline-end: calc(var(--map-breadcrumb-border) + 0.35rem);
+    }
+
+    .map-breadcrumbs.last .map-breadcrumb:last-child::before {
+        clip-path: polygon(
+            0 0,
+            100% 0,
+            100% 50%,
+            100% 100%,
+            0 100%,
+            calc(.5lh * tan(var(--map-breadcrumb-angle))) 50%,
+            0 0,
+            calc(var(--map-breadcrumb-border) * (tan(var(--map-breadcrumb-angle)) + 1 / cos(var(--map-breadcrumb-angle)))) var(--map-breadcrumb-border),
+            calc(.5lh * tan(var(--map-breadcrumb-angle)) + var(--map-breadcrumb-border) / cos(var(--map-breadcrumb-angle))) 50%,
+            calc(var(--map-breadcrumb-border) * (tan(var(--map-breadcrumb-angle)) + 1 / cos(var(--map-breadcrumb-angle)))) calc(100% - var(--map-breadcrumb-border)),
+            calc(100% - var(--map-breadcrumb-border)) calc(100% - var(--map-breadcrumb-border)),
+            calc(100% - var(--map-breadcrumb-border)) var(--map-breadcrumb-border),
+            calc(var(--map-breadcrumb-border) * (tan(var(--map-breadcrumb-angle)) + cos(var(--map-breadcrumb-angle)))) var(--map-breadcrumb-border)
+        );
+    }
+
+    .map-breadcrumb:hover,
+    .map-breadcrumb:focus-visible {
+        color: rgba(255, 255, 255, 0.95);
+    }
+
+    .map-breadcrumb[aria-current="page"] {
+        color: rgba(226, 232, 240, 0.98);
+        cursor: default;
     }
 
     .map-places-search {

@@ -1,8 +1,7 @@
 <script lang="ts">
     import { videosStore, usersStore } from "$lib/stores/library";
     import { selectedVideo } from "$lib/stores/selectedVideo";
-    import Map from "$lib/components/Map.svelte";
-    import type MapComponent from "$lib/components/Map.svelte";
+    import MapComponent from "$lib/components/Map.svelte";
     import MonthCalendar from "$lib/components/MonthCalendar.svelte";
     import TogglePill from "$lib/components/TogglePill.svelte";
     import { page } from "$app/stores";
@@ -23,7 +22,12 @@
         region?: string;
         location?: MapLocation | null;
     };
-    type MapSearchResult = SearchPlaceResult & { hasVideos: boolean };
+    type MapSearchResult = SearchPlaceResult & { 
+        hasVideos: boolean;
+        videoCount?: number;
+        thumbnails?: string[];
+        usernames?: string[];
+    };
     const videos = $derived($videosStore);
     const users = $derived($usersStore);
     let activeTab = $state<"keywords" | "date" | "users" | "search" | "map" | "index">("index");
@@ -167,6 +171,112 @@
 
             return false;
         });
+    }
+
+    function getLocationVideoDetails(result: SearchPlaceResult): {
+        videoCount: number;
+        thumbnails: string[];
+        usernames: string[];
+    } {
+        const resultName = normaliseText(result.name)?.toLowerCase() ?? null;
+        const contextNames = result.context
+            ? result.context
+                  .split(",")
+                  .map((part) => normaliseText(part)?.toLowerCase())
+                  .filter(Boolean)
+            : [];
+        const candidateNames = new Set<string>();
+        if (resultName) candidateNames.add(resultName);
+        for (const ctxName of contextNames) {
+            if (ctxName) candidateNames.add(ctxName);
+        }
+
+        const lon = result.longitude;
+        const lat = result.latitude;
+
+        const matchingLocations: MapLocation[] = [];
+        
+        for (const loc of locations) {
+            const parts = extractLocationParts(loc);
+            const locationNames = [
+                parts.country,
+                parts.region,
+                parts.place,
+                loc.setting,
+                loc.name,
+                loc.place,
+                loc.city,
+                loc.region,
+                loc.country,
+                loc.environment
+            ]
+                .map((value) => normaliseText(value)?.toLowerCase())
+                .filter(Boolean);
+
+            let matched = false;
+            for (const candidate of candidateNames) {
+                if (candidate && locationNames.includes(candidate)) {
+                    matched = true;
+                    break;
+                }
+            }
+
+            const coords =
+                (typeof loc.mapLon === "number" && typeof loc.mapLat === "number"
+                    ? [loc.mapLon, loc.mapLat]
+                    : typeof loc.longitude === "number" && typeof loc.latitude === "number"
+                      ? [loc.longitude, loc.latitude]
+                      : Array.isArray(loc.coordinates) && loc.coordinates.length === 2
+                        ? [loc.coordinates[0], loc.coordinates[1]]
+                        : null) as [number, number] | null;
+
+            if (!matched && coords && Number.isFinite(lon) && Number.isFinite(lat)) {
+                const dLon = Math.abs(coords[0] - lon);
+                const dLat = Math.abs(coords[1] - lat);
+                if (dLon <= 1.5 && dLat <= 1.5) {
+                    matched = true;
+                }
+            }
+
+            if (matched) {
+                matchingLocations.push(loc);
+            }
+        }
+
+        // Get unique video IDs
+        const uniqueVideoIds = new Set<string>();
+        const videoData = new Map<string, { thumbnail?: string; author?: string }>();
+        
+        for (const loc of matchingLocations) {
+            if (loc.videoId) {
+                uniqueVideoIds.add(loc.videoId);
+                const video = videos.find(v => v.id === loc.videoId);
+                if (video && !videoData.has(loc.videoId)) {
+                    videoData.set(loc.videoId, {
+                        thumbnail: video.thumbnailUrl,
+                        author: loc.videoAuthor ?? video.author
+                    });
+                }
+            }
+        }
+
+        const thumbnails: string[] = [];
+        const usernames = new Set<string>();
+        
+        for (const [videoId, data] of videoData.entries()) {
+            if (data.thumbnail && thumbnails.length < 4) {
+                thumbnails.push(data.thumbnail);
+            }
+            if (data.author) {
+                usernames.add(data.author);
+            }
+        }
+
+        return {
+            videoCount: uniqueVideoIds.size,
+            thumbnails,
+            usernames: Array.from(usernames).slice(0, 5) // Limit to 5 usernames
+        };
     }
     
     // Format filter options
@@ -488,10 +598,24 @@
                 const results = await searchPlaces(query, { limit: 8 });
                 if (requestToken !== mapSearchRequestId) return;
                 const enriched = results
-                    .map((result) => ({
-                        ...result,
-                        hasVideos: resultHasVideos(result)
-                    }))
+                    .map((result) => {
+                        const hasVideos = resultHasVideos(result);
+                        if (hasVideos) {
+                            const details = getLocationVideoDetails(result);
+                            return {
+                                ...result,
+                                hasVideos,
+                                ...details
+                            };
+                        }
+                        return {
+                            ...result,
+                            hasVideos,
+                            videoCount: 0,
+                            thumbnails: [],
+                            usernames: []
+                        };
+                    })
                     .sort((a, b) => Number(b.hasVideos) - Number(a.hasVideos));
 
                 mapSearchResults = enriched;
@@ -1279,18 +1403,17 @@
                 <div class="filters-container mb-6">
                     <div class="filters-row">
                         <!-- Map Breadcrumbs -->
-                        <div class="filter-item map-breadcrumbs" role="navigation" aria-label="Map location breadcrumbs">
+                        <div class="map-breadcrumbs" role="navigation" aria-label="Map location breadcrumbs">
                             {#each mapBreadcrumbs as crumb, index}
                                 <button
                                     type="button"
-                                    class="breadcrumb-link"
+                                    class="breadcrumb-segment"
+                                    class:first={index === 0}
+                                    class:last={index === mapBreadcrumbs.length - 1}
                                     onclick={() => handleBreadcrumbClick(crumb)}
                                 >
                                     {crumb.label}
                                 </button>
-                                {#if index < mapBreadcrumbs.length - 1}
-                                    <span class="breadcrumb-separator" aria-hidden="true">›</span>
-                                {/if}
                             {/each}
                         </div>
 
@@ -1344,12 +1467,39 @@
                                             <button type="button" onclick={() => handleMapSearchSelect(result)}>
                                                 <div class="result-header">
                                                     <span class="result-title">{result.name}</span>
-                                                    {#if result.hasVideos}
-                                                        <span class="result-badge">videos</span>
+                                                    {#if result.hasVideos && result.videoCount}
+                                                        <span class="result-badge">{result.videoCount} {result.videoCount === 1 ? 'video' : 'videos'}</span>
                                                     {/if}
                                                 </div>
                                                 {#if result.context}
                                                     <span class="result-context">{result.context}</span>
+                                                {/if}
+                                                {#if result.hasVideos && (result.thumbnails && result.thumbnails.length > 0 || result.usernames && result.usernames.length > 0)}
+                                                    <div class="result-details">
+                                                        {#if result.thumbnails && result.thumbnails.length > 0}
+                                                            <div class="result-thumbnails">
+                                                                {#each result.thumbnails.slice(0, 4) as thumbnail}
+                                                                    <img src={thumbnail} alt="" class="result-thumbnail" loading="lazy" />
+                                                                {/each}
+                                                            </div>
+                                                        {/if}
+                                                        {#if result.usernames && result.usernames.length > 0}
+                                                            <div class="result-users">
+                                                                <svg class="result-users-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                                                                    <circle cx="9" cy="7" r="4"></circle>
+                                                                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                                                                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                                                                </svg>
+                                                                <span class="result-users-text">
+                                                                    {result.usernames.slice(0, 3).join(', ')}
+                                                                    {#if result.usernames.length > 3}
+                                                                        <span class="result-users-more"> +{result.usernames.length - 3} more</span>
+                                                                    {/if}
+                                                                </span>
+                                                            </div>
+                                                        {/if}
+                                                    </div>
                                                 {/if}
                                             </button>
                                         </li>
@@ -1848,7 +1998,7 @@
         {:else if activeTab === "map"}
             <!-- Map View -->
             <div class="map-view-container">
-                <Map
+                <MapComponent
                     bind:this={mapRef}
                     locations={filteredLocations}
                     initialCenterLon={lon}
@@ -1996,17 +2146,27 @@
     }
 
     .map-breadcrumbs {
-        gap: 0.35rem;
-        padding: 0.45rem 0.75rem;
-        background: rgba(255, 255, 255, 0.05);
+        display: inline-flex;
+        align-items: stretch;
+        background: rgba(17, 23, 32, 0.65);
+        border: 1px solid rgba(148, 163, 184, 0.18);
+        border-radius: 0.75rem;
+        backdrop-filter: blur(6px);
+        overflow: hidden;
     }
 
     .map-places-search {
         position: relative;
-        width: 200px;
-        min-width: 200px;
-        max-width: 200px;
-        flex: 0 0 200px;
+        width: 400px;
+        min-width: 400px;
+        max-width: 400px;
+        flex: 0 0 400px;
+        border-radius: 0 !important;
+        border: none !important;
+    }
+    
+    .map-places-search:focus-within {
+        border: none !important;
     }
 
     .map-places-search.loading::after {
@@ -2045,7 +2205,7 @@
         list-style: none;
         margin: 0;
         padding: 0.35rem;
-        max-height: 280px;
+        max-height: 420px;
         overflow-y: auto;
     }
 
@@ -2105,24 +2265,99 @@
         color: rgba(255, 255, 255, 0.55);
     }
 
-    .breadcrumb-link {
-        background: transparent;
-        border: none;
-        color: rgba(255, 255, 255, 0.7);
+    .map-search-results .result-details {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        margin-top: 0.25rem;
+    }
+
+    .map-search-results .result-thumbnails {
+        display: flex;
+        gap: 0.25rem;
+        align-items: center;
+    }
+
+    .map-search-results .result-thumbnail {
+        width: 36px;
+        height: 36px;
+        border-radius: 6px;
+        object-fit: cover;
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        flex-shrink: 0;
+    }
+
+    .map-search-results .result-users {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+    }
+
+    .map-search-results .result-users-icon {
+        width: 14px;
+        height: 14px;
+        color: rgba(255, 255, 255, 0.4);
+        flex-shrink: 0;
+    }
+
+    .map-search-results .result-users-text {
         font-size: 0.75rem;
-        cursor: pointer;
-        padding: 0;
+        color: rgba(255, 255, 255, 0.65);
+        line-height: 1.4;
     }
 
-    .breadcrumb-link:hover,
-    .breadcrumb-link:focus-visible {
-        color: white;
-        outline: none;
-    }
-
-    .breadcrumb-separator {
+    .map-search-results .result-users-more {
         color: rgba(255, 255, 255, 0.45);
-        font-size: 0.75rem;
+        font-weight: 500;
+    }
+
+    .breadcrumb-segment {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(15, 18, 24, 0.65);
+        color: rgba(226, 232, 240, 0.82);
+        font-size: 0.875rem;
+        font-weight: 500;
+        border: none;
+        padding: 0.55rem 1.85rem;
+        transition: background 0.2s ease, color 0.2s ease;
+        cursor: pointer;
+        outline: none;
+        clip-path: polygon(12% 0%, 100% 0%, 88% 50%, 100% 100%, 12% 100%, 0% 50%);
+        box-shadow: none;
+    }
+
+    .breadcrumb-segment:hover,
+    .breadcrumb-segment:focus-visible {
+        background: rgba(30, 41, 59, 0.75);
+        color: white;
+    }
+
+    .breadcrumb-segment.first {
+        clip-path: polygon(0% 0%, 100% 0%, 88% 50%, 100% 100%, 0% 100%);
+        padding-left: 1.4rem;
+    }
+
+    .breadcrumb-segment.last {
+        clip-path: polygon(12% 0%, 100% 0%, 100% 100%, 12% 100%, 0% 50%);
+        padding-right: 1.4rem;
+    }
+
+    .breadcrumb-segment.first.last {
+        clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%);
+        padding-left: 1.4rem;
+        padding-right: 1.4rem;
+        box-shadow: none;
+    }
+
+    .breadcrumb-segment:not(.first) {
+        padding-left: 2.2rem;
+    }
+
+    .breadcrumb-segment:not(.last) {
+        box-shadow: inset -1px 0 0 rgba(148, 163, 184, 0.18);
     }
 
     /* Format Filter Icon Group */

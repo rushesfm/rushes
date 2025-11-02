@@ -1,24 +1,27 @@
 <script lang="ts">
 	import { browser } from '$app/environment';
-	import { onDestroy, onMount } from 'svelte';
+	import { createEventDispatcher, onDestroy, onMount } from 'svelte';
 	import type mapboxgl from 'mapbox-gl';
 	import 'mapbox-gl/dist/mapbox-gl.css';
 
-	interface Location {
-		mapLat?: number;
-		mapLon?: number;
-		latitude?: number;
-		longitude?: number;
-		coordinates?: [number, number];
-		setting?: string;
-		name?: string;
+	import type { Location as BaseLocation } from '$lib/types/content';
+	import { reverseGeocode } from '$lib/utils/mapbox';
+
+	type MapLocation = BaseLocation & {
 		videoTitle?: string;
 		videoAuthor?: string;
 		videoId?: string;
-	}
+	};
+
+	type AdminContext = {
+		country?: string | null;
+		region?: string | null;
+		city?: string | null;
+		fullAddress?: string | null;
+	};
 
 	interface Props {
-		locations?: Location[];
+		locations?: MapLocation[];
 		initialCenterLat?: number;
 		initialCenterLon?: number;
 		initialZoom?: number;
@@ -26,7 +29,7 @@
 	}
   const props = $props() as Props;
 
-  let locations = $state<Location[]>(props.locations ?? []);
+  let locations = $state<MapLocation[]>(props.locations ?? []);
   let activeVideoId = $state(props.activeVideoId ?? null);
 
   $effect(() => {
@@ -74,7 +77,7 @@
 		import.meta.env.PUBLIC_MAPBOX_STYLE ??
 		'mapbox://styles/mapbox/dark-v11'; // Fallback to public style
 
-	function normaliseCoordinates(loc: Location): [number, number] | null {
+	function normaliseCoordinates(loc: MapLocation): [number, number] | null {
 		if (typeof loc.mapLon === 'number' && typeof loc.mapLat === 'number') {
 			return [loc.mapLon, loc.mapLat];
 		}
@@ -93,6 +96,178 @@
 		markers = [];
 	}
 
+	const dispatch = createEventDispatcher<{
+		activeLocationChange: {
+			location: MapLocation | null;
+			center: { lon: number; lat: number };
+			admin: AdminContext;
+		};
+	}>();
+
+	const ACTIVE_LOCATION_THRESHOLD_DEGREES = 1.2;
+	const geocodeCache = new Map<string, AdminContext | null>();
+	const geocodeRequests = new Map<string, Promise<AdminContext | null>>();
+
+	function getLocationKey(location: MapLocation | null): string | null {
+		if (!location) return null;
+		const coords = normaliseCoordinates(location);
+		const rounded =
+			coords?.map((value) => value.toFixed(6)).join(',') ??
+			`${location.id ?? ''}:${location.videoId ?? ''}`;
+		const label =
+			location.videoId ??
+			location.name ??
+			location.setting ??
+			location.city ??
+			location.country ??
+			location.place ??
+			'';
+		const key = `${rounded}|${label}`.trim();
+		return key.length > 0 ? key : null;
+	}
+
+	function sanitiseName(raw: unknown): string | null {
+		if (typeof raw === 'string') {
+			const trimmed = raw.trim();
+			return trimmed.length > 0 ? trimmed : null;
+		}
+		return null;
+	}
+
+	function contextsEqual(a: AdminContext | null | undefined, b: AdminContext | null | undefined) {
+		const norm = (value?: string | null) => (value ? value.trim().toLowerCase() : '');
+		return (
+			norm(a?.country) === norm(b?.country) &&
+			norm(a?.region) === norm(b?.region) &&
+			norm(a?.city) === norm(b?.city) &&
+			norm(a?.fullAddress) === norm(b?.fullAddress)
+		);
+	}
+
+	function normaliseAdminContext(...contexts: Array<AdminContext | null | undefined>): AdminContext {
+		const pick = (selector: keyof AdminContext) => {
+			for (const ctx of contexts) {
+				const value = ctx ? sanitiseName(ctx[selector]) : null;
+				if (value) return value;
+			}
+			return null;
+		};
+		return {
+			country: pick('country'),
+			region: pick('region'),
+			city: pick('city'),
+			fullAddress: pick('fullAddress')
+		};
+	}
+
+	function getAdminFromLocation(location: MapLocation | null): AdminContext {
+		if (!location) return {};
+		return {
+			country: sanitiseName(location.country),
+			region:
+				sanitiseName(location.state) ??
+				sanitiseName(location.region) ??
+				sanitiseName(location.locality),
+			city:
+				sanitiseName(location.place) ??
+				sanitiseName(location.name) ??
+				sanitiseName(location.setting) ??
+				sanitiseName(location.city) ??
+				sanitiseName(location.environment)
+		};
+	}
+
+	function buildCoordKey(center: { lon: number; lat: number }) {
+		return `${Number(center.lon).toFixed(3)},${Number(center.lat).toFixed(3)}`;
+	}
+
+	let activeLocationKey: string | null = null;
+	let activeLocation: MapLocation | null = null;
+	let lastAdminContext: AdminContext = {};
+
+	async function updateAdminContextAsync(
+		location: MapLocation,
+		center: { lon: number; lat: number },
+		baseContext: AdminContext
+	) {
+		if (!browser) return;
+		const coordsKey = buildCoordKey(center);
+		const locationKey = getLocationKey(location);
+		if (!locationKey) return;
+
+		const applyContext = (context: AdminContext | null) => {
+			if (!context) return;
+			if (locationKey !== activeLocationKey) return;
+			const merged = normaliseAdminContext(context, baseContext);
+			if (contextsEqual(merged, lastAdminContext)) return;
+			lastAdminContext = merged;
+			dispatch('activeLocationChange', { location, center, admin: merged });
+		};
+
+		if (geocodeCache.has(coordsKey)) {
+			applyContext(geocodeCache.get(coordsKey) ?? null);
+			return;
+		}
+
+		if (geocodeRequests.has(coordsKey)) {
+			const pending = geocodeRequests.get(coordsKey);
+			const resolved = await pending;
+			if (!resolved) return;
+			applyContext(resolved);
+			return;
+		}
+
+		const request = reverseGeocode(center.lon, center.lat)
+			.then((result) => {
+				if (!result) {
+					geocodeCache.set(coordsKey, null);
+					return null;
+				}
+				const admin: AdminContext = {
+					country: result.country,
+					region: result.region,
+					city: result.city,
+					fullAddress: result.fullAddress
+				};
+				geocodeCache.set(coordsKey, admin);
+				return admin;
+			})
+			.catch(() => {
+				geocodeCache.set(coordsKey, null);
+				return null;
+			})
+			.finally(() => {
+				geocodeRequests.delete(coordsKey);
+			});
+
+		geocodeRequests.set(coordsKey, request);
+		const resolved = await request;
+		if (!resolved) return;
+		applyContext(resolved);
+	}
+
+	function setActiveLocation(
+		location: MapLocation | null,
+		center: { lon: number; lat: number },
+		options: { force?: boolean } = {}
+	) {
+		const key = getLocationKey(location);
+		const hasChanged = key !== activeLocationKey;
+		if (!options.force && !hasChanged) {
+			return;
+		}
+		activeLocationKey = key;
+		activeLocation = location;
+
+		const baseAdmin = normaliseAdminContext(getAdminFromLocation(location));
+		lastAdminContext = baseAdmin;
+		dispatch('activeLocationChange', { location, center, admin: baseAdmin });
+
+		if (location) {
+			updateAdminContextAsync(location, center, baseAdmin);
+		}
+	}
+
   // Simple HTML sanitization - escapes dangerous characters
   function escapeHtml(text: string): string {
     const map: Record<string, string> = {
@@ -105,7 +280,7 @@
     return text.replace(/[&<>"']/g, (char) => map[char]);
   }
 
-  function syncMarkers(currentLocations: Location[] = []) {
+  function syncMarkers(currentLocations: MapLocation[] = []) {
     if (!map) return;
     clearMarkers();
     for (const loc of currentLocations) {
@@ -150,11 +325,45 @@
 
 	let mapboxModule: typeof mapboxgl | null = null;
 
-	function findLocationByVideoId(videoId: string | null): Location | null {
+	function findLocationByVideoId(videoId: string | null): MapLocation | null {
 		if (!videoId) return null;
 	return (
 		locations.find((loc) => loc.videoId === videoId) ?? null
 	);
+	}
+
+	function findNearestLocation(
+		center: mapboxgl.LngLat
+	): { location: MapLocation; distance: number } | null {
+		let best: MapLocation | null = null;
+		let bestDistance = Number.POSITIVE_INFINITY;
+		for (const loc of locations) {
+			const coords = normaliseCoordinates(loc);
+			if (!coords) continue;
+			const [lon, lat] = coords;
+			const distance = Math.hypot(center.lng - lon, center.lat - lat);
+			if (distance < bestDistance) {
+				best = loc;
+				bestDistance = distance;
+			}
+		}
+		return best ? { location: best, distance: bestDistance } : null;
+	}
+
+	function updateActiveLocationFromCenter(options: { force?: boolean } = {}) {
+		if (!map) return;
+		const center = map.getCenter();
+		const nearest = findNearestLocation(center);
+		if (!nearest) {
+			if (options.force) {
+				setActiveLocation(null, { lon: center.lng, lat: center.lat }, { force: true });
+			}
+			return;
+		}
+		if (!options.force && nearest.distance > ACTIVE_LOCATION_THRESHOLD_DEGREES) {
+			return;
+		}
+		setActiveLocation(nearest.location, { lon: center.lng, lat: center.lat }, { force: options.force });
 	}
 
 	function focusOnVideo(
@@ -171,6 +380,7 @@
 	const targetZoom = 10;
 	// Always use instant positioning when video changes (no animation)
 	map.jumpTo({ center: [lon, lat], zoom: targetZoom });
+	setActiveLocation(location, { lon, lat }, { force: true });
 	lastFocusedVideoId = videoId;
 }
 
@@ -202,12 +412,19 @@
 				zoom: center.zoom,
 				cooperativeGestures: true
 			});
+			map.on('moveend', () => {
+				updateActiveLocationFromCenter();
+			});
 			map.once('load', () => {
 				mapReady = true;
 				syncMarkers(locations);
 				// Map is already positioned correctly from initial center/zoom, no need to jump
 				if (activeVideoId) {
 					lastFocusedVideoId = activeVideoId;
+					updateActiveLocationFromCenter({ force: true });
+				} else {
+					lastFocusedVideoId = null;
+					updateActiveLocationFromCenter({ force: true });
 				}
 				
 				// Smoothly zoom in 1 level immediately when map shows (each time map tab is clicked)
@@ -238,6 +455,7 @@
 	$effect(() => {
 		if (map && mapboxModule) {
 			syncMarkers(locations);
+			updateActiveLocationFromCenter();
 		}
 	});
 
@@ -246,6 +464,7 @@
 		if (!activeVideoId) {
 			lastFocusedVideoId = null;
 			syncMarkers(locations); // Update markers when no active video
+			updateActiveLocationFromCenter({ force: true });
 			return;
 		}
 		focusOnVideo(activeVideoId);
@@ -261,6 +480,48 @@
 		hasInitialZoomed = false;
 		isInitialLoad = true;
 	});
+
+	export function zoomToWorld() {
+		if (!map || !mapboxModule) return;
+		const bounds = new mapboxModule.LngLatBounds([-179.9, -70], [179.9, 83]);
+		map.fitBounds(bounds, { padding: 48, duration: 800, maxZoom: 3.5 });
+		updateActiveLocationFromCenter({ force: true });
+	}
+
+	export function zoomToLocation(location: MapLocation, zoom = 10) {
+		if (!map) return;
+		const coords = normaliseCoordinates(location);
+		if (!coords) return;
+		map.easeTo({
+			center: coords,
+			zoom,
+			duration: 700,
+			easing: (t) => 1 - Math.pow(1 - t, 3)
+		});
+		setActiveLocation(location, { lon: coords[0], lat: coords[1] }, { force: true });
+	}
+
+	export function fitToLocations(targetLocations: MapLocation[], options?: { padding?: number; maxZoom?: number }) {
+		if (!map || !mapboxModule) return;
+		const coords = targetLocations
+			.map((loc) => normaliseCoordinates(loc))
+			.filter((coord): coord is [number, number] => Array.isArray(coord));
+		if (coords.length === 0) return;
+		const bounds = coords.slice(1).reduce(
+			(acc, coord) => acc.extend(coord),
+			new mapboxModule.LngLatBounds(coords[0], coords[0])
+		);
+		map.fitBounds(bounds, {
+			padding: options?.padding ?? 80,
+			duration: 700,
+			maxZoom: options?.maxZoom ?? 7
+		});
+		updateActiveLocationFromCenter({ force: true });
+	}
+
+	export function getActiveLocation(): MapLocation | null {
+		return activeLocation;
+	}
 </script>
 
 <div class="map-wrapper">

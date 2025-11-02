@@ -2,10 +2,25 @@
     import { videosStore, usersStore } from "$lib/stores/library";
     import { selectedVideo } from "$lib/stores/selectedVideo";
     import Map from "$lib/components/Map.svelte";
+    import type MapComponent from "$lib/components/Map.svelte";
     import MonthCalendar from "$lib/components/MonthCalendar.svelte";
     import TogglePill from "$lib/components/TogglePill.svelte";
     import { page } from "$app/stores";
+    import type { Location as BaseLocation } from "$lib/types/content";
 
+    type MapLocation = BaseLocation & {
+        videoTitle?: string;
+        videoAuthor?: string;
+        videoId?: string;
+    };
+
+    type MapBreadcrumb = {
+        label: string;
+        level: "global" | "country" | "region" | "place";
+        country?: string;
+        region?: string;
+        location?: MapLocation | null;
+    };
     const videos = $derived($videosStore);
     const users = $derived($usersStore);
     let activeTab = $state<"keywords" | "date" | "users" | "search" | "map" | "index">("index");
@@ -22,6 +37,62 @@
     
     // Filter state for Map tab
     let mapSearchQuery = $state("");
+    let mapActiveLocation = $state<MapLocation | null>(null);
+    let mapAdminContext = $state<{
+        country?: string | null;
+        region?: string | null;
+        city?: string | null;
+        fullAddress?: string | null;
+    } | null>(null);
+    let mapRef: MapComponent | null = null;
+
+    function normaliseText(value?: string | null) {
+        return value?.trim() ? value.trim() : null;
+    }
+
+    function equalsIgnoreCase(a?: string | null, b?: string | null) {
+        const left = normaliseText(a)?.toLowerCase();
+        const right = normaliseText(b)?.toLowerCase();
+        if (!left || !right) return false;
+        return left === right;
+    }
+
+    function extractLocationParts(location: MapLocation | null) {
+        if (!location) {
+            return { country: null as string | null, region: null as string | null, place: null as string | null };
+        }
+        let country = normaliseText(location.country);
+        let region = normaliseText(location.state ?? location.region ?? location.locality);
+        let place = normaliseText(
+            location.place ?? location.name ?? location.setting ?? location.city ?? location.environment
+        );
+
+        const labelSource = normaliseText(location.setting ?? location.name ?? location.place);
+        if (labelSource) {
+            const tokens = labelSource
+                .split(",")
+                .map((token) => token.trim())
+                .filter(Boolean);
+            if (!place && tokens.length > 0) {
+                place = tokens[0];
+            }
+            if (!country && tokens.length > 1) {
+                country = tokens[tokens.length - 1];
+            }
+            if (!region && tokens.length > 2) {
+                region = tokens.slice(1, -1).join(", ");
+            }
+        }
+
+        if (region && country && equalsIgnoreCase(region, country)) {
+            region = null;
+        }
+        if (place && region && equalsIgnoreCase(place, region)) {
+            region = null;
+        }
+
+        return { country, region, place };
+    }
     
     // Format filter options
     const formatOptions = [
@@ -218,13 +289,13 @@
     // Map-related logic
     const locations = $derived(
         videos.flatMap((video) =>
-            video.locations?.map((loc) => ({
+            (video.locations?.map((loc): MapLocation => ({
                 ...loc,
                 videoId: video.id,
                 videoTitle: video.title,
                 videoAuthor: video.author
-            })) ?? []
-        )
+            })) ?? [])
+        ) as MapLocation[]
     );
 
     const lat = $derived(parseFloat($page.url.searchParams.get('lat') ?? '20'));
@@ -232,8 +303,8 @@
     const zoom = $derived(parseInt($page.url.searchParams.get('zoom') ?? '9', 10)); // Start more zoomed in
 
     // Filter locations based on URL params and search query
-    const filteredLocations = $derived.by(() => {
-        let filtered = locations;
+    const filteredLocations = $derived.by<MapLocation[]>(() => {
+        let filtered: MapLocation[] = locations;
         
         // First filter by URL params if present
         if (lat && lon) {
@@ -268,6 +339,142 @@
         
         return filtered;
     });
+
+    const mapBreadcrumbs = $derived.by(() => {
+        const crumbs: MapBreadcrumb[] = [{ label: "global", level: "global" }];
+        const location = mapActiveLocation;
+        const adminCountry = normaliseText(mapAdminContext?.country ?? undefined);
+        const adminRegion = normaliseText(mapAdminContext?.region ?? undefined);
+        const adminCity = normaliseText(mapAdminContext?.city ?? undefined);
+        if (!location) {
+            return crumbs;
+        }
+        const { country, region, place } = extractLocationParts(location);
+        const resolvedCountry = adminCountry ?? country;
+        let resolvedRegion = adminRegion ?? region;
+        let resolvedPlace = adminCity ?? place;
+        if (resolvedCountry && resolvedRegion && equalsIgnoreCase(resolvedRegion, resolvedCountry)) {
+            resolvedRegion = null;
+        }
+        if (resolvedRegion && resolvedPlace && equalsIgnoreCase(resolvedPlace, resolvedRegion)) {
+            resolvedPlace = null;
+        }
+        if (resolvedCountry && resolvedPlace && equalsIgnoreCase(resolvedPlace, resolvedCountry)) {
+            resolvedPlace = null;
+        }
+        if (resolvedCountry) {
+            crumbs.push({ label: resolvedCountry, level: "country", country: resolvedCountry });
+        }
+        if (resolvedRegion) {
+            crumbs.push({
+                label: resolvedRegion,
+                level: "region",
+                country: resolvedCountry ?? undefined,
+                region: resolvedRegion
+            });
+        }
+        if (resolvedPlace) {
+            crumbs.push({ label: resolvedPlace, level: "place", location });
+        }
+        return crumbs;
+    });
+
+    function handleActiveLocationChange(
+        event: CustomEvent<{
+            location: MapLocation | null;
+            center: { lon: number; lat: number };
+            admin: { country?: string | null; region?: string | null; city?: string | null; fullAddress?: string | null };
+        }>
+    ) {
+        const location = event.detail.location ?? null;
+        mapActiveLocation = location;
+        if (!location) {
+            mapAdminContext = null;
+            return;
+        }
+        const admin = event.detail.admin ?? null;
+        if (!admin) {
+            mapAdminContext = null;
+            return;
+        }
+        const hasInfo =
+            normaliseText(admin.country ?? undefined) ||
+            normaliseText(admin.region ?? undefined) ||
+            normaliseText(admin.city ?? undefined) ||
+            normaliseText(admin.fullAddress ?? undefined);
+        mapAdminContext = hasInfo ? admin : null;
+    }
+
+    function filterLocationsByCountry(targetCountry?: string | null) {
+        if (!targetCountry) return [] as MapLocation[];
+        return filteredLocations.filter((loc) => {
+            const parts = extractLocationParts(loc);
+            if (equalsIgnoreCase(parts.country, targetCountry)) return true;
+            const region = parts.region;
+            if (equalsIgnoreCase(region, targetCountry)) return true;
+            const label = normaliseText(
+                loc.setting ?? loc.name ?? loc.place ?? loc.city ?? loc.region ?? loc.country ?? undefined
+            );
+            return equalsIgnoreCase(label, targetCountry);
+        });
+    }
+
+    function filterLocationsByRegion(targetCountry: string | null, targetRegion?: string | null) {
+        if (!targetRegion) return [] as MapLocation[];
+        return filteredLocations.filter((loc) => {
+            const parts = extractLocationParts(loc);
+            const sameCountry = targetCountry ? equalsIgnoreCase(parts.country, targetCountry) : true;
+            if (!sameCountry) return false;
+            if (equalsIgnoreCase(parts.region, targetRegion)) return true;
+            if (equalsIgnoreCase(parts.place, targetRegion)) return true;
+            const label = normaliseText(loc.setting ?? loc.name ?? loc.place ?? loc.city ?? undefined);
+            return equalsIgnoreCase(label, targetRegion);
+        });
+    }
+
+    function handleBreadcrumbClick(crumb: MapBreadcrumb) {
+        const instance = mapRef;
+        if (!instance) return;
+
+        if (crumb.level === "global") {
+            instance.zoomToWorld();
+            return;
+        }
+
+        const activeLocation = mapActiveLocation;
+        if (!activeLocation) return;
+
+        if (crumb.level === "country") {
+            let matches = filterLocationsByCountry(crumb.country ?? null);
+            if (matches.length === 0 && activeLocation) {
+                matches = [activeLocation];
+            }
+            if (matches.length > 1) {
+                instance.fitToLocations(matches, { padding: 96, maxZoom: 5.5 });
+            } else {
+                instance.zoomToLocation(activeLocation, 4.5);
+            }
+            return;
+        }
+
+        if (crumb.level === "region") {
+            let matches = filterLocationsByRegion(crumb.country ?? null, crumb.region ?? null);
+            if (matches.length === 0 && activeLocation) {
+                matches = [activeLocation];
+            }
+            if (matches.length > 1) {
+                instance.fitToLocations(matches, { padding: 96, maxZoom: 6.5 });
+            } else {
+                instance.zoomToLocation(activeLocation, 6.5);
+            }
+            return;
+        }
+
+        if (crumb.level === "place") {
+            const target = crumb.location ?? activeLocation;
+            instance.zoomToLocation(target, 10);
+        }
+    }
 
     const activeVideoId = $derived($selectedVideo.id);
 
@@ -971,6 +1178,22 @@
                                 </button>
                             {/if}
                         </div>
+
+                        <!-- Map Breadcrumbs -->
+                        <div class="filter-item map-breadcrumbs" role="navigation" aria-label="Map location breadcrumbs">
+                            {#each mapBreadcrumbs as crumb, index}
+                                <button
+                                    type="button"
+                                    class="breadcrumb-link"
+                                    onclick={() => handleBreadcrumbClick(crumb)}
+                                >
+                                    {crumb.label}
+                                </button>
+                                {#if index < mapBreadcrumbs.length - 1}
+                                    <span class="breadcrumb-separator" aria-hidden="true">›</span>
+                                {/if}
+                            {/each}
+                        </div>
                         
                         <!-- Playing Indicator -->
                         {#if activeVideoId}
@@ -1463,11 +1686,13 @@
             <!-- Map View -->
             <div class="map-view-container">
                 <Map
+                    bind:this={mapRef}
                     locations={filteredLocations}
                     initialCenterLon={lon}
                     initialCenterLat={lat}
                     initialZoom={zoom}
                     activeVideoId={activeVideoId}
+                    on:activeLocationChange={handleActiveLocationChange}
                 />
             </div>
         {/if}
@@ -1605,6 +1830,33 @@
     .filter-select option {
         background: rgba(15, 18, 24, 0.98);
         color: white;
+    }
+
+    .map-breadcrumbs {
+        gap: 0.35rem;
+        padding: 0.45rem 0.75rem;
+        background: rgba(255, 255, 255, 0.05);
+    }
+
+    .breadcrumb-link {
+        background: transparent;
+        border: none;
+        color: rgba(255, 255, 255, 0.7);
+        font-size: 0.75rem;
+        text-transform: lowercase;
+        cursor: pointer;
+        padding: 0;
+    }
+
+    .breadcrumb-link:hover,
+    .breadcrumb-link:focus-visible {
+        color: white;
+        outline: none;
+    }
+
+    .breadcrumb-separator {
+        color: rgba(255, 255, 255, 0.45);
+        font-size: 0.75rem;
     }
 
     /* Format Filter Icon Group */
@@ -2185,4 +2437,3 @@
         }
     }
 </style>
-

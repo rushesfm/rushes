@@ -12,6 +12,12 @@ export interface Location {
 	isGuess?: boolean;
 	id?: number;
 	name?: string;
+	city?: string;
+	state?: string;
+	region?: string;
+	country?: string;
+	locality?: string;
+	place?: string;
 	coordinates?: [number, number];
 }
 

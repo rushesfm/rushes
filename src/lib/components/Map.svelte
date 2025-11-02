@@ -501,27 +501,42 @@
 		setActiveLocation(location, { lon: coords[0], lat: coords[1] }, { force: true });
 	}
 
-	export function fitToLocations(targetLocations: MapLocation[], options?: { padding?: number; maxZoom?: number }) {
-		if (!map || !mapboxModule) return;
-		const coords = targetLocations
-			.map((loc) => normaliseCoordinates(loc))
-			.filter((coord): coord is [number, number] => Array.isArray(coord));
-		if (coords.length === 0) return;
-		const bounds = coords.slice(1).reduce(
-			(acc, coord) => acc.extend(coord),
-			new mapboxModule.LngLatBounds(coords[0], coords[0])
-		);
-		map.fitBounds(bounds, {
-			padding: options?.padding ?? 80,
-			duration: 700,
-			maxZoom: options?.maxZoom ?? 7
-		});
-		updateActiveLocationFromCenter({ force: true });
-	}
+export function fitToLocations(targetLocations: MapLocation[], options?: { padding?: number; maxZoom?: number }) {
+	if (!map || !mapboxModule) return;
+	const coords = targetLocations
+		.map((loc) => normaliseCoordinates(loc))
+		.filter((coord): coord is [number, number] => Array.isArray(coord));
+	if (coords.length === 0) return;
+	const bounds = coords.slice(1).reduce(
+		(acc, coord) => acc.extend(coord),
+		new mapboxModule.LngLatBounds(coords[0], coords[0])
+	);
+	map.fitBounds(bounds, {
+		padding: options?.padding ?? 80,
+		duration: 700,
+		maxZoom: options?.maxZoom ?? 7
+	});
+	updateActiveLocationFromCenter({ force: true });
+}
 
-	export function getActiveLocation(): MapLocation | null {
-		return activeLocation;
-	}
+export function getActiveLocation(): MapLocation | null {
+	return activeLocation;
+}
+
+export function flyToCoordinates(lon: number, lat: number, options?: { zoom?: number }) {
+	if (!map) return;
+	const targetZoom = options?.zoom ?? Math.max(map.getZoom(), 6);
+	map.easeTo({
+		center: [lon, lat],
+		zoom: targetZoom,
+		duration: 800,
+		easing: (t) => 1 - Math.pow(1 - t, 3)
+	});
+	// Defer active location update until map settles on the new view.
+	setTimeout(() => {
+		updateActiveLocationFromCenter({ force: true });
+	}, 820);
+}
 </script>
 
 <div class="map-wrapper">

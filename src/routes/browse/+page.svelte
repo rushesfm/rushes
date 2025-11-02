@@ -7,6 +7,8 @@
     import TogglePill from "$lib/components/TogglePill.svelte";
     import { page } from "$app/stores";
     import type { Location as BaseLocation } from "$lib/types/content";
+    import type { SearchPlaceResult } from "$lib/utils/mapbox";
+    import { searchPlaces } from "$lib/utils/mapbox";
 
     type MapLocation = BaseLocation & {
         videoTitle?: string;
@@ -21,6 +23,7 @@
         region?: string;
         location?: MapLocation | null;
     };
+    type MapSearchResult = SearchPlaceResult & { hasVideos: boolean };
     const videos = $derived($videosStore);
     const users = $derived($usersStore);
     let activeTab = $state<"keywords" | "date" | "users" | "search" | "map" | "index">("index");
@@ -37,6 +40,11 @@
     
     // Filter state for Map tab
     let mapSearchQuery = $state("");
+    let mapSearchResults = $state<MapSearchResult[]>([]);
+    let showMapSearchResults = $state(false);
+    let mapSearchLoading = $state(false);
+    let mapSearchDebounce: ReturnType<typeof setTimeout> | null = null;
+    let mapSearchRequestId = 0;
     let mapActiveLocation = $state<MapLocation | null>(null);
     let mapAdminContext = $state<{
         country?: string | null;
@@ -92,6 +100,73 @@
         }
 
         return { country, region, place };
+    }
+
+    function resultHasVideos(result: SearchPlaceResult): boolean {
+        const resultName = normaliseText(result.name)?.toLowerCase() ?? null;
+        const contextNames = result.context
+            ? result.context
+                  .split(",")
+                  .map((part) => normaliseText(part)?.toLowerCase())
+                  .filter(Boolean)
+            : [];
+        const candidateNames = new Set<string>();
+        if (resultName) candidateNames.add(resultName);
+        for (const ctxName of contextNames) {
+            if (ctxName) candidateNames.add(ctxName);
+        }
+
+        const lon = result.longitude;
+        const lat = result.latitude;
+
+        return locations.some((loc) => {
+            const parts = extractLocationParts(loc);
+            const locationNames = [
+                parts.country,
+                parts.region,
+                parts.place,
+                loc.setting,
+                loc.name,
+                loc.place,
+                loc.city,
+                loc.region,
+                loc.country,
+                loc.environment
+            ]
+                .map((value) => normaliseText(value)?.toLowerCase())
+                .filter(Boolean);
+
+            let matched = false;
+            for (const candidate of candidateNames) {
+                if (candidate && locationNames.includes(candidate)) {
+                    matched = true;
+                    break;
+                }
+            }
+
+            const coords =
+                (typeof loc.mapLon === "number" && typeof loc.mapLat === "number"
+                    ? [loc.mapLon, loc.mapLat]
+                    : typeof loc.longitude === "number" && typeof loc.latitude === "number"
+                      ? [loc.longitude, loc.latitude]
+                      : Array.isArray(loc.coordinates) && loc.coordinates.length === 2
+                        ? [loc.coordinates[0], loc.coordinates[1]]
+                        : null) as [number, number] | null;
+
+            if (!matched && coords && Number.isFinite(lon) && Number.isFinite(lat)) {
+                const dLon = Math.abs(coords[0] - lon);
+                const dLat = Math.abs(coords[1] - lat);
+                if (dLon <= 1.5 && dLat <= 1.5) {
+                    matched = true;
+                }
+            }
+
+            if (matched) {
+                return true;
+            }
+
+            return false;
+        });
     }
     
     // Format filter options
@@ -326,17 +401,6 @@
             );
         }
         
-        // Then filter by search query if present
-        if (mapSearchQuery.trim()) {
-            const query = mapSearchQuery.toLowerCase();
-            filtered = filtered.filter((loc) => {
-                const setting = (loc.setting || loc.name || '').toLowerCase();
-                const title = (loc.videoTitle || '').toLowerCase();
-                const author = (loc.videoAuthor || '').toLowerCase();
-                return setting.includes(query) || title.includes(query) || author.includes(query);
-            });
-        }
-        
         return filtered;
     });
 
@@ -403,6 +467,67 @@
             normaliseText(admin.city ?? undefined) ||
             normaliseText(admin.fullAddress ?? undefined);
         mapAdminContext = hasInfo ? admin : null;
+    }
+
+    function scheduleMapSearch(query: string) {
+        if (mapSearchDebounce) {
+            clearTimeout(mapSearchDebounce);
+            mapSearchDebounce = null;
+        }
+        if (!query.trim() || query.trim().length < 2) {
+            mapSearchRequestId++;
+            mapSearchResults = [] as MapSearchResult[];
+            mapSearchLoading = false;
+            showMapSearchResults = false;
+            return;
+        }
+        mapSearchLoading = true;
+        const requestToken = ++mapSearchRequestId;
+        mapSearchDebounce = setTimeout(async () => {
+            try {
+                const results = await searchPlaces(query, { limit: 8 });
+                if (requestToken !== mapSearchRequestId) return;
+                const enriched = results
+                    .map((result) => ({
+                        ...result,
+                        hasVideos: resultHasVideos(result)
+                    }))
+                    .sort((a, b) => Number(b.hasVideos) - Number(a.hasVideos));
+
+                mapSearchResults = enriched;
+                showMapSearchResults = enriched.length > 0;
+            } catch (error) {
+                console.warn("Map place search failed:", error);
+                if (requestToken === mapSearchRequestId) {
+                    mapSearchResults = [] as MapSearchResult[];
+                    showMapSearchResults = false;
+                }
+            } finally {
+                if (requestToken === mapSearchRequestId) {
+                    mapSearchLoading = false;
+                }
+                mapSearchDebounce = null;
+            }
+        }, 250);
+    }
+
+    function handleMapSearchInput(event: Event) {
+        const target = event.currentTarget as HTMLInputElement;
+        const value = target.value;
+        mapSearchQuery = value;
+        showMapSearchResults = true;
+        scheduleMapSearch(value);
+    }
+
+    function handleMapSearchSelect(result: MapSearchResult) {
+        mapSearchQuery = result.name;
+        showMapSearchResults = false;
+        mapSearchResults = [] as MapSearchResult[];
+        mapSearchLoading = false;
+        mapSearchRequestId++;
+        if (mapRef && typeof result.longitude === "number" && typeof result.latitude === "number") {
+            mapRef.flyToCoordinates(result.longitude, result.latitude, { zoom: result.zoom ?? 6 });
+        }
     }
 
     function filterLocationsByCountry(targetCountry?: string | null) {
@@ -1153,32 +1278,6 @@
             {#if activeTab === "map"}
                 <div class="filters-container mb-6">
                     <div class="filters-row">
-                        <!-- Map Search -->
-                        <div class="filter-item filter-search">
-                            <svg class="filter-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
-                                <circle cx="11" cy="11" r="7" />
-                                <line x1="20" y1="20" x2="16.65" y2="16.65" />
-                            </svg>
-                            <input
-                                type="text"
-                                bind:value={mapSearchQuery}
-                                placeholder="Search locations..."
-                                class="filter-input"
-                            />
-                            {#if mapSearchQuery}
-                                <button
-                                    onclick={() => (mapSearchQuery = "")}
-                                    class="filter-clear"
-                                    aria-label="Clear search"
-                                >
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <line x1="18" y1="6" x2="6" y2="18" />
-                                        <line x1="6" y1="6" x2="18" y2="18" />
-                                    </svg>
-                                </button>
-                            {/if}
-                        </div>
-
                         <!-- Map Breadcrumbs -->
                         <div class="filter-item map-breadcrumbs" role="navigation" aria-label="Map location breadcrumbs">
                             {#each mapBreadcrumbs as crumb, index}
@@ -1193,6 +1292,70 @@
                                     <span class="breadcrumb-separator" aria-hidden="true">›</span>
                                 {/if}
                             {/each}
+                        </div>
+
+                        <!-- Map Search -->
+                        <div
+                            class="filter-item filter-search map-places-search"
+                            class:loading={mapSearchLoading}
+                            aria-live="polite"
+                        >
+                            <svg class="filter-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+                                <circle cx="11" cy="11" r="7" />
+                                <line x1="20" y1="20" x2="16.65" y2="16.65" />
+                            </svg>
+                            <input
+                                type="text"
+                                bind:value={mapSearchQuery}
+                                placeholder="Search places..."
+                                class="filter-input"
+                                oninput={handleMapSearchInput}
+                                onfocus={() => (showMapSearchResults = true)}
+                                onblur={() => {
+                                    setTimeout(() => (showMapSearchResults = false), 120);
+                                }}
+                                aria-autocomplete="list"
+                                aria-controls="map-search-results"
+                                aria-expanded={showMapSearchResults}
+                            />
+                            {#if mapSearchQuery}
+                                <button
+                                    onclick={() => {
+                                        mapSearchQuery = "";
+                                        mapSearchResults = [] as MapSearchResult[];
+                                        showMapSearchResults = false;
+                                        mapSearchLoading = false;
+                                        mapSearchRequestId++;
+                                    }}
+                                    class="filter-clear"
+                                    aria-label="Clear search"
+                                >
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <line x1="18" y1="6" x2="6" y2="18" />
+                                        <line x1="6" y1="6" x2="18" y2="18" />
+                                    </svg>
+                                </button>
+                            {/if}
+
+                            {#if showMapSearchResults && mapSearchResults.length > 0}
+                                <ul class="map-search-results" role="listbox" id="map-search-results">
+                                    {#each mapSearchResults as result (result.id)}
+                                        <li>
+                                            <button type="button" onclick={() => handleMapSearchSelect(result)}>
+                                                <div class="result-header">
+                                                    <span class="result-title">{result.name}</span>
+                                                    {#if result.hasVideos}
+                                                        <span class="result-badge">videos</span>
+                                                    {/if}
+                                                </div>
+                                                {#if result.context}
+                                                    <span class="result-context">{result.context}</span>
+                                                {/if}
+                                            </button>
+                                        </li>
+                                    {/each}
+                                </ul>
+                            {/if}
                         </div>
                         
                         <!-- Playing Indicator -->
@@ -1838,12 +2001,115 @@
         background: rgba(255, 255, 255, 0.05);
     }
 
+    .map-places-search {
+        position: relative;
+        width: 200px;
+        min-width: 200px;
+        max-width: 200px;
+        flex: 0 0 200px;
+    }
+
+    .map-places-search.loading::after {
+        content: '';
+        position: absolute;
+        top: 50%;
+        right: 2rem;
+        width: 14px;
+        height: 14px;
+        border-radius: 9999px;
+        border: 2px solid rgba(255, 255, 255, 0.4);
+        border-top-color: transparent;
+        animation: map-search-spin 0.8s linear infinite;
+        transform: translateY(-50%);
+    }
+
+    @keyframes map-search-spin {
+        from {
+            transform: translateY(-50%) rotate(0deg);
+        }
+        to {
+            transform: translateY(-50%) rotate(360deg);
+        }
+    }
+
+    .map-search-results {
+        position: absolute;
+        top: calc(100% + 0.5rem);
+        left: 0;
+        right: 0;
+        z-index: 40;
+        background: rgba(15, 18, 24, 0.95);
+        border-radius: 12px;
+        box-shadow: 0 18px 40px -20px rgba(0, 0, 0, 0.8);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        list-style: none;
+        margin: 0;
+        padding: 0.35rem;
+        max-height: 280px;
+        overflow-y: auto;
+    }
+
+    .map-search-results li + li {
+        margin-top: 0.25rem;
+    }
+
+    .map-search-results button {
+        width: 100%;
+        text-align: left;
+        border: none;
+        background: transparent;
+        color: rgba(255, 255, 255, 0.85);
+        padding: 0.5rem 0.6rem;
+        border-radius: 8px;
+        cursor: pointer;
+        transition: background 0.15s ease;
+        display: flex;
+        flex-direction: column;
+        gap: 0.2rem;
+    }
+
+    .map-search-results button:hover,
+    .map-search-results button:focus-visible {
+        background: rgba(255, 255, 255, 0.08);
+        outline: none;
+    }
+
+    .map-search-results .result-title {
+        font-size: 0.875rem;
+        font-weight: 600;
+    }
+
+    .map-search-results .result-header {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+
+    .map-search-results .result-badge {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.65rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        padding: 0.125rem 0.4rem;
+        border-radius: 9999px;
+        background: rgba(251, 146, 60, 0.18);
+        color: rgb(251, 191, 84);
+        border: 1px solid rgba(251, 146, 60, 0.45);
+    }
+
+    .map-search-results .result-context {
+        font-size: 0.75rem;
+        color: rgba(255, 255, 255, 0.55);
+    }
+
     .breadcrumb-link {
         background: transparent;
         border: none;
         color: rgba(255, 255, 255, 0.7);
         font-size: 0.75rem;
-        text-transform: lowercase;
         cursor: pointer;
         padding: 0;
     }

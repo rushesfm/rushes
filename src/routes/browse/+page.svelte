@@ -57,6 +57,7 @@
         fullAddress?: string | null;
     } | null>(null);
     let mapRef: MapComponent | null = null;
+    let activeBreadcrumbLevel = $state<"global" | "country" | "region" | "place" | null>(null);
 
     function normaliseText(value?: string | null) {
         return value?.trim() ? value.trim() : null;
@@ -684,6 +685,9 @@
     function handleBreadcrumbClick(crumb: MapBreadcrumb) {
         const instance = mapRef;
         if (!instance) return;
+
+        // Set the active breadcrumb level
+        activeBreadcrumbLevel = crumb.level;
 
         if (crumb.level === "global") {
             instance.zoomToWorld();
@@ -1403,17 +1407,31 @@
                 <div class="filters-container mb-6">
                     <div class="filters-row">
                         <!-- Map Breadcrumbs -->
-                        <nav class="map-breadcrumbs" aria-label="Map location breadcrumbs">
+
+
+
+  
+                        <nav class="breadcrumbs" aria-label="Map location breadcrumbs">
                             {#each mapBreadcrumbs as crumb, index (crumb.label)}
-                                {@const isLast = index === mapBreadcrumbs.length - 1}
+                                {@const isActive = crumb.level === activeBreadcrumbLevel}
+                                {@const isGlobal = crumb.level === "global"}
                                 <button
                                     type="button"
-                                    class="map-breadcrumbs__item"
-                                    class:is-active={isLast}
+                                    class="breadcrumbs__item {index === 0 ? 'first' : ''}"
+                                    class:is-active={isActive}
                                     onclick={() => handleBreadcrumbClick(crumb)}
-                                    aria-current={isLast ? "page" : undefined}
+                                    aria-current={isActive ? "page" : undefined}
+                                    aria-label={isGlobal ? "Global view" : crumb.label}
                                 >
-                                    {crumb.label}
+                                    {#if isGlobal}
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                            <circle cx="12" cy="12" r="10"></circle>
+                                            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                                            <path d="M2 12h20"></path>
+                                        </svg>
+                                    {:else}
+                                        {crumb.label}
+                                    {/if}
                                 </button>
                             {/each}
                         </nav>
@@ -2050,7 +2068,7 @@
         position: sticky;
         top: 0;
         z-index: 30;
-        padding: 1.5rem 2rem;
+        padding: 1.5rem 2rem .6rem;
         background: rgba(0, 0, 0, 0.78);
         backdrop-filter: blur(18px);
         box-shadow: 0 8px 32px -8px rgba(15, 23, 42, 0.4);
@@ -2100,7 +2118,7 @@
         display: inline-flex;
         align-items: center;
         gap: 0.5rem;
-        padding: 0.5rem 0.75rem;
+        
         transition: all 0.2s ease;
         background: rgba(255, 255, 255, 0.08);
         border-radius: 9999px;
@@ -2146,85 +2164,69 @@
         color: white;
     }
 
-    .map-breadcrumbs {
-        display: inline-flex;
-        align-items: center;
-        border: 1px solid rgba(148, 163, 184, 0.28);
-        border-radius: 0.75rem;
-        overflow: hidden;
-        backdrop-filter: blur(8px);
-        background: rgba(15, 18, 24, 0.55);
-        box-shadow: 0 12px 28px -20px rgba(15, 23, 42, 0.8);
-    }
+    /* --- Your Original CSS Variables --- */
+    .breadcrumbs {
+  border: 1px solid #303030;
+  border-radius: .5rem;
+  display: inline-flex;
+  overflow: hidden;
+}
 
-    .map-breadcrumbs__item {
-        --crumb-bg: rgba(15, 18, 24, 0.55);
-        --crumb-border: rgba(148, 163, 184, 0.38);
-        --crumb-hover-bg: rgba(30, 41, 59, 0.6);
-        --crumb-active-bg: rgba(30, 41, 59, 0.75);
-        --crumb-text: rgba(226, 232, 240, 0.82);
+.breadcrumbs__item {
+  background: rgb(22, 22, 22);  /* breadcrumb background color */
+  color: #fff;  /* breadcrumb text color  */
+  outline: none;
+  padding: .8em 1em .8em 1.7em;
+  position: relative;
+  font-size: .74rem;
+  text-decoration: none;
+  transition: background 0.2s linear;
+}
 
-        position: relative;
-        background: var(--crumb-bg);
-        color: var(--crumb-text);
-        padding: 0.55rem 1rem 0.55rem 1.6rem;
-        font-size: 0.85rem;
-        font-weight: 500;
-        border: none;
-        outline: none;
-        cursor: pointer;
-        transition: background 0.2s linear, color 0.2s linear;
-        text-decoration: none;
-        border-top: 1px solid var(--crumb-border);
-        border-bottom: 1px solid var(--crumb-border);
-        border-left: 1px solid transparent;
-    }
+.breadcrumbs__item.first {
+    padding-left: .9em;
+    padding-right: .6em;
+}
 
-    .map-breadcrumbs__item::before,
-    .map-breadcrumbs__item::after {
-        content: "";
-        position: absolute;
-        top: 0;
-        bottom: 0;
-        width: 1em;
-        left: 100%;
-        clip-path: polygon(50% 50%, -50% -50%, 0 100%);
-        transition: background 0.2s linear;
-    }
+.breadcrumbs__item:hover:after,
+.breadcrumbs__item:hover {
+  background: rgb(51, 51, 51);  /* breadcrumb background color on hover */
+  cursor: pointer;
+}
 
-    .map-breadcrumbs__item::before {
-        background: var(--crumb-border);
-        margin-left: 1px;
-    }
+.breadcrumbs__item:focus:after,
+.breadcrumbs__item:focus,
+.breadcrumbs__item.is-active:focus {
+  background: #0b0b0b;  /* breadcrumb background color on active */
+  color: #fff;
+}
 
-    .map-breadcrumbs__item::after {
-        background: var(--crumb-bg);
-        z-index: 1;
-    }
+.breadcrumbs__item:after,
+.breadcrumbs__item:before {
+  background: rgb(22, 22, 22);  /* chevron background color must match the background color of the item */
+  bottom: -1px;
+  clip-path: polygon(50% 50%, -50% -50%, 0 100%);
+  content: "";
+  left: 100%;
+  position: absolute;
+  top: -1px;
+  transition: background 0.2s linear;
+  width: 1em;
+  z-index: 1;
+}
 
-    .map-breadcrumbs__item:last-child::before,
-    .map-breadcrumbs__item:last-child::after {
-        display: none;
-    }
+.breadcrumbs__item:before {
+  background: rgba(255,255,255,0.2);  /* chevron border color */
+  margin-left: 1px;
+}
 
-    .map-breadcrumbs__item:first-child {
-        padding-left: 1.1rem;
-        border-left-color: var(--crumb-border);
-    }
+.breadcrumbs__item:last-child {
+  border-right: none;
+}   
 
-    .map-breadcrumbs__item:hover,
-    .map-breadcrumbs__item:hover::after {
-        background: var(--crumb-hover-bg);
-        color: white;
-    }
-
-    .map-breadcrumbs__item:focus-visible,
-    .map-breadcrumbs__item:focus-visible::after,
-    .map-breadcrumbs__item.is-active,
-    .map-breadcrumbs__item.is-active::after {
-        background: var(--crumb-active-bg);
-        color: white;
-    }
+.breadcrumbs__item.is-active, .breadcrumbs__item.is-active:after, .breadcrumbs__item.is-active:before {
+  background: #d76b1e;  /* breadcrumb background color on active */
+}
 
     .map-places-search {
         position: relative;

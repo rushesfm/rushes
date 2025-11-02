@@ -2148,10 +2148,10 @@
     .map-breadcrumbs {
         display: inline-flex;
         align-items: stretch;
-        background: rgba(17, 23, 32, 0.65);
-        border: 1px solid rgba(148, 163, 184, 0.18);
+        background: rgba(15, 18, 24, 0.55);
+        border: 1px solid rgba(148, 163, 184, 0.25);
         border-radius: 0.75rem;
-        backdrop-filter: blur(6px);
+        backdrop-filter: blur(8px);
         overflow: hidden;
     }
 
@@ -2312,52 +2312,66 @@
     }
 
     .breadcrumb-segment {
+        --clip-shape: polygon(0% 0%, 88% 0%, 100% 50%, 88% 100%, 0% 100%, 12% 50%);
+        --border-color: rgba(148, 163, 184, 0.35);
         position: relative;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        background: rgba(15, 18, 24, 0.65);
+        background: rgba(17, 24, 39, 0.72);
         color: rgba(226, 232, 240, 0.82);
         font-size: 0.875rem;
         font-weight: 500;
         border: none;
+        border-radius: 0;
         padding: 0.55rem 1.85rem;
         transition: background 0.2s ease, color 0.2s ease;
         cursor: pointer;
         outline: none;
-        clip-path: polygon(12% 0%, 100% 0%, 88% 50%, 100% 100%, 12% 100%, 0% 50%);
+        clip-path: var(--clip-shape);
+        margin-left: -1px;
         box-shadow: none;
+        z-index: 0;
     }
 
     .breadcrumb-segment:hover,
     .breadcrumb-segment:focus-visible {
-        background: rgba(30, 41, 59, 0.75);
+        background: rgba(30, 41, 59, 0.85);
         color: white;
+        --border-color: rgba(148, 163, 184, 0.55);
+    }
+
+    .breadcrumb-segment::after {
+        content: '';
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        border: 1px solid var(--border-color);
+        border-radius: 0;
+        clip-path: var(--clip-shape);
+        opacity: 0.9;
+        z-index: 0;
     }
 
     .breadcrumb-segment.first {
-        clip-path: polygon(0% 0%, 100% 0%, 88% 50%, 100% 100%, 0% 100%);
+        --clip-shape: polygon(0% 0%, 92% 0%, 100% 50%, 92% 100%, 0% 100%);
+        margin-left: 0;
         padding-left: 1.4rem;
     }
 
     .breadcrumb-segment.last {
-        clip-path: polygon(12% 0%, 100% 0%, 100% 100%, 12% 100%, 0% 50%);
+        --clip-shape: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%, 12% 50%);
         padding-right: 1.4rem;
     }
 
     .breadcrumb-segment.first.last {
-        clip-path: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%);
-        padding-left: 1.4rem;
-        padding-right: 1.4rem;
-        box-shadow: none;
+        --clip-shape: polygon(0% 0%, 100% 0%, 100% 100%, 0% 100%);
+        padding-left: 1.6rem;
+        padding-right: 1.6rem;
     }
 
     .breadcrumb-segment:not(.first) {
         padding-left: 2.2rem;
-    }
-
-    .breadcrumb-segment:not(.last) {
-        box-shadow: inset -1px 0 0 rgba(148, 163, 184, 0.18);
     }
 
     /* Format Filter Icon Group */

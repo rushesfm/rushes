@@ -102,6 +102,9 @@
 			center: { lon: number; lat: number };
 			admin: AdminContext;
 		};
+		viewportChange: {
+			bounds: { north: number; south: number; east: number; west: number };
+		};
 	}>();
 
 	const ACTIVE_LOCATION_THRESHOLD_DEGREES = 1.2;
@@ -414,10 +417,16 @@
 			});
 			map.on('moveend', () => {
 				updateActiveLocationFromCenter();
+				dispatchViewportChange();
+			});
+			
+			map.on('zoomend', () => {
+				dispatchViewportChange();
 			});
 			map.once('load', () => {
 				mapReady = true;
 				syncMarkers(locations);
+				dispatchViewportChange();
 				// Map is already positioned correctly from initial center/zoom, no need to jump
 				if (activeVideoId) {
 					lastFocusedVideoId = activeVideoId;
@@ -517,6 +526,23 @@ export function fitToLocations(targetLocations: MapLocation[], options?: { paddi
 		maxZoom: options?.maxZoom ?? 7
 	});
 	updateActiveLocationFromCenter({ force: true });
+}
+
+function dispatchViewportChange() {
+	if (!map || !mapboxModule) return;
+	try {
+		const bounds = map.getBounds();
+		dispatch('viewportChange', {
+			bounds: {
+				north: bounds.getNorth(),
+				south: bounds.getSouth(),
+				east: bounds.getEast(),
+				west: bounds.getWest()
+			}
+		});
+	} catch (error) {
+		console.warn('Failed to get map bounds:', error);
+	}
 }
 
 export function getActiveLocation(): MapLocation | null {

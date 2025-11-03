@@ -20,7 +20,7 @@
     const navLinks = [
         { href: "/", label: "Home", icon: "live" },
         // { href: "/live", label: "Live", icon: "play" },
-        { href: "/map", label: "Map", icon: "map" },
+        // { href: "/map", label: "Map", icon: "map" },
         { href: "/browse", label: "Browse", icon: "browse" },
         { href: "/account", label: "Upload", icon: "account" },
         { href: "/faq", label: "FAQ", icon: "faq" },
@@ -201,6 +201,7 @@
                                             <span
                                                 class="logo-bar logo-bar--short"
                                             ></span>
+
                                         </span>
                                     {:else}
                                         <span
@@ -315,7 +316,7 @@
     .logo-bar {
         width: 0.2rem;
         border-radius: 9999px;
-        background: white;
+        background: rgb(255, 129, 3);
     }
 
     .logo-bar--long {
@@ -330,12 +331,7 @@
         height: 0.5rem;
     }
 
-    .logo-bar--circle {
-        width: 0.4rem;
-        height: 0.4rem;
-        border-radius: 9999px;
-        background: white;
-    }
+ 
 
     .sidebar-shell {
         overflow-x: visible;

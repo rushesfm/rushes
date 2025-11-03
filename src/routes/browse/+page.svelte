@@ -58,6 +58,85 @@
     } | null>(null);
     let mapRef: MapComponent | null = null;
     let activeBreadcrumbLevel = $state<"global" | "country" | "region" | "place" | null>(null);
+    let mapCarouselContainer = $state<HTMLElement | null>(null);
+    let canScrollLeft = $state(false);
+    let canScrollRight = $state(false);
+    let mapViewportBounds = $state<{ north: number; south: number; east: number; west: number } | null>(null);
+    let tooltipVideo = $state<typeof videos[0] | null>(null);
+    let tooltipPosition = $state({ x: 0, y: 0 });
+    let tooltipVisible = $state(false);
+    let tooltipImageLoaded = $state(false);
+    
+    function getPreviewThumbnailUrl(video: typeof videos[0]): string | null {
+        if (!video.streamId) return null;
+        // Extract CDN hostname from videoUrl or downloadUrl (like the working example)
+        const url = video.videoUrl || video.url || '';
+        const match = url.match(/https?:\/\/([^\/]+)/);
+        if (match && match[1]) {
+            const cdnHost = match[1];
+            // Build preview URL: https://cdn-host/streamId/preview.webp?v=timestamp
+            const timestamp = Date.now();
+            return `https://${cdnHost}/${video.streamId}/preview.webp?v=${timestamp}`;
+        }
+        // Fallback to env variable if URL extraction fails
+        const cdnHost = import.meta.env.PUBLIC_BUNNY_CDN_HOST_NAME || import.meta.env.VITE_BUNNY_CDN_HOST_NAME || '';
+        if (cdnHost) {
+            const timestamp = Date.now();
+            return `https://${cdnHost}/${video.streamId}/preview.webp?v=${timestamp}`;
+        }
+        return null;
+    }
+    
+    function formatVideoDate(dateString?: string | null): string {
+        if (!dateString) return 'Unknown date';
+        try {
+            const date = new Date(dateString);
+            return date.toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' });
+        } catch {
+            return 'Unknown date';
+        }
+    }
+    
+    function handleCarouselCardMouseEnter(event: MouseEvent, video: typeof videos[0]) {
+        tooltipVideo = video;
+        tooltipImageLoaded = false; // Reset loading state
+        updateTooltipPosition(event);
+        tooltipVisible = true;
+    }
+    
+    function handleCarouselCardMouseMove(event: MouseEvent) {
+        if (tooltipVisible) {
+            updateTooltipPosition(event);
+        }
+    }
+    
+    function handleCarouselCardMouseLeave() {
+        tooltipVisible = false;
+        tooltipVideo = null;
+        tooltipImageLoaded = false;
+    }
+    
+    function handleTooltipImageLoad() {
+        tooltipImageLoaded = true;
+    }
+    
+    function handleTooltipImageError() {
+        tooltipImageLoaded = true; // Hide spinner even on error
+    }
+    
+    function updateTooltipPosition(event: MouseEvent) {
+        tooltipPosition = { x: event.clientX, y: event.clientY };
+    }
+    
+    function updateCarouselScrollState() {
+        if (!mapCarouselContainer) {
+            canScrollLeft = false;
+            canScrollRight = false;
+            return;
+        }
+        canScrollLeft = mapCarouselContainer.scrollLeft > 0;
+        canScrollRight = mapCarouselContainer.scrollLeft < mapCarouselContainer.scrollWidth - mapCarouselContainer.clientWidth - 1;
+    }
 
     function normaliseText(value?: string | null) {
         return value?.trim() ? value.trim() : null;
@@ -730,6 +809,84 @@
     }
 
     const activeVideoId = $derived($selectedVideo.id);
+
+    // Helper function to get coordinates from location
+    function getLocationCoords(loc: MapLocation): [number, number] | null {
+        if (typeof loc.mapLon === 'number' && typeof loc.mapLat === 'number') {
+            return [loc.mapLon, loc.mapLat];
+        }
+        if (typeof loc.longitude === 'number' && typeof loc.latitude === 'number') {
+            return [loc.longitude, loc.latitude];
+        }
+        if (Array.isArray(loc.coordinates) && loc.coordinates.length === 2) {
+            return [loc.coordinates[0], loc.coordinates[1]];
+        }
+        return null;
+    }
+
+    // Check if location is within viewport bounds
+    function isLocationInViewport(loc: MapLocation, bounds: { north: number; south: number; east: number; west: number } | null): boolean {
+        if (!bounds) return true; // If no bounds, show all
+        const coords = getLocationCoords(loc);
+        if (!coords) return false;
+        const [lon, lat] = coords;
+        // Handle longitude wrapping (if bounds cross -180/180)
+        if (bounds.west > bounds.east) {
+            return lat >= bounds.south && lat <= bounds.north && (lon >= bounds.west || lon <= bounds.east);
+        }
+        return lat >= bounds.south && lat <= bounds.north && lon >= bounds.west && lon <= bounds.east;
+    }
+
+    // Get unique videos from locations within viewport for carousel
+    const mapViewVideos = $derived.by(() => {
+        const videoMap = new Map<string, { video: typeof videos[0]; location: MapLocation }>();
+        const locationsToUse = mapViewportBounds ? locations.filter(loc => isLocationInViewport(loc, mapViewportBounds)) : locations;
+        
+        for (const loc of locationsToUse) {
+            if (loc.videoId) {
+                const video = videos.find(v => v.id === loc.videoId);
+                if (video && !videoMap.has(loc.videoId)) {
+                    videoMap.set(loc.videoId, { video, location: loc });
+                }
+            }
+        }
+        return Array.from(videoMap.values());
+    });
+
+    function scrollCarousel(direction: 'left' | 'right') {
+        if (!mapCarouselContainer) return;
+        const scrollAmount = 400;
+        const currentScroll = mapCarouselContainer.scrollLeft;
+        const newScroll = direction === 'left' 
+            ? currentScroll - scrollAmount 
+            : currentScroll + scrollAmount;
+        mapCarouselContainer.scrollTo({ left: newScroll, behavior: 'smooth' });
+        setTimeout(updateCarouselScrollState, 100);
+    }
+    
+    $effect(() => {
+        if (mapCarouselContainer && mapViewVideos.length > 0) {
+            updateCarouselScrollState();
+            const handleScroll = () => updateCarouselScrollState();
+            mapCarouselContainer.addEventListener('scroll', handleScroll);
+            const resizeObserver = new ResizeObserver(() => updateCarouselScrollState());
+            resizeObserver.observe(mapCarouselContainer);
+            return () => {
+                mapCarouselContainer?.removeEventListener('scroll', handleScroll);
+                resizeObserver.disconnect();
+            };
+        }
+    });
+
+    function handleMapVideoClick(video: typeof videos[0], location: MapLocation) {
+        // Play the video
+        selectedVideo.selectVideo(video.id);
+        
+        // Center map on location
+        if (mapRef) {
+            mapRef.zoomToLocation(location, 10);
+        }
+    }
 
     // ===== KEYWORDS LOGIC =====
     // Extract all unique keywords from videos
@@ -1527,16 +1684,127 @@
                             {/if}
                         </div>
                         
-                        <!-- Playing Indicator -->
-                        {#if activeVideoId}
-                            <div class="filter-item playing-indicator">
-                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <polygon points="5 3 19 12 5 21 5 3" />
-                                </svg>
-                                <span>Playing</span>
-                            </div>
-                        {/if}
+                      
                     </div>
+                    
+                    <!-- Map Video Carousel -->
+                    {#if mapViewVideos.length > 0}
+                        <div class="map-video-carousel-wrapper">
+                            {#if canScrollLeft}
+                                <button
+                                    type="button"
+                                    class="carousel-nav carousel-nav-left"
+                                    onclick={() => scrollCarousel('left')}
+                                    aria-label="Scroll left"
+                                >
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M15 18l-6-6 6-6"></path>
+                                    </svg>
+                                </button>
+                            {/if}
+                            <div 
+                                class="map-video-carousel"
+                                bind:this={mapCarouselContainer}
+                            >
+                                {#each mapViewVideos as item (item.video.id)}
+                                    {@const isPlaying = item.video.id === activeVideoId}
+                                    <button
+                                        type="button"
+                                        class="carousel-video-card"
+                                        class:is-playing={isPlaying}
+                                        onclick={() => handleMapVideoClick(item.video, item.location)}
+                                        onmouseenter={(e) => handleCarouselCardMouseEnter(e, item.video)}
+                                        onmousemove={handleCarouselCardMouseMove}
+                                        onmouseleave={handleCarouselCardMouseLeave}
+                                    >
+                                        <div class="carousel-video-thumbnail">
+                                            {#if item.video.thumbnailUrl}
+                                                <img 
+                                                    src={item.video.thumbnailUrl} 
+                                                    alt={item.video.title}
+                                                    loading="lazy"
+                                                />
+                                            {:else}
+                                                <div class="carousel-video-placeholder">
+                                                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                                        <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                                                    </svg>
+                                                </div>
+                                            {/if}
+                                            {#if isPlaying}
+                                                <div class="carousel-video-playing-overlay">
+                                                    <span class="carousel-logo-mark">
+                                                        <span class="carousel-logo-bar carousel-logo-bar--long"></span>
+                                                        <span class="carousel-logo-bar carousel-logo-bar--medium"></span>
+                                                        <span class="carousel-logo-bar carousel-logo-bar--short"></span>
+                                                    </span>
+                                                </div>
+                                            {/if}
+                                        </div>
+                                        <!-- <div class="carousel-video-info">
+                                            <div class="carousel-video-title">{item.video.title}</div>
+                                            <div class="carousel-video-author">{item.video.author}</div>
+                                        </div> -->
+                                    </button>
+                                {/each}
+                            </div>
+                            {#if canScrollRight}
+                                <button
+                                    type="button"
+                                    class="carousel-nav carousel-nav-right"
+                                    onclick={() => scrollCarousel('right')}
+                                    aria-label="Scroll right"
+                                >
+                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                        <path d="M9 18l6-6-6-6"></path>
+                                    </svg>
+                                </button>
+                            {/if}
+                        </div>
+                    {/if}
+                    
+                    <!-- Video Tooltip -->
+                    {#if tooltipVisible && tooltipVideo}
+                        <div 
+                            class="carousel-video-tooltip"
+                            style={`left: ${tooltipPosition.x - 580}px; top: ${tooltipPosition.y - 10 }px;`}
+                        >
+                            <div class="carousel-tooltip-thumbnail">
+                                {#if getPreviewThumbnailUrl(tooltipVideo)}
+                                    {#if !tooltipImageLoaded}
+                                        <div class="carousel-tooltip-spinner">
+                                            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spinner-icon">
+                                                <circle cx="12" cy="12" r="10"></circle>
+                                                <path d="M12 2a10 10 0 0 0-10 10"></path>
+                                            </svg>
+                                        </div>
+                                    {/if}
+                                    <img 
+                                        src={getPreviewThumbnailUrl(tooltipVideo)!} 
+                                        alt={tooltipVideo.title}
+                                        loading="lazy"
+                                        onload={handleTooltipImageLoad}
+                                        onerror={handleTooltipImageError}
+                                        style="width: 100%; height: 100%; object-fit: cover;"
+                                        class:tooltip-image-loaded={tooltipImageLoaded}
+                                    />
+                                {:else}
+                                    <div class="carousel-tooltip-placeholder">
+                                        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                            <polygon points="5 3 19 12 5 21 5 3"></polygon>
+                                        </svg>
+                                    </div>
+                                {/if}
+                            </div>
+                            <div class="carousel-tooltip-info">
+                                <div class="carousel-tooltip-title">{tooltipVideo.title}</div>
+                                <div class="carousel-tooltip-meta">
+                                    <span class="carousel-tooltip-author">{tooltipVideo.author}</span>
+                                    <span class="carousel-tooltip-date">{formatVideoDate(tooltipVideo.uploadedAt)}</span>
+                                </div>
+                            </div>
+                        </div>
+                    {/if}
                 </div>
             {/if}
 
@@ -2025,6 +2293,9 @@
                     initialZoom={zoom}
                     activeVideoId={activeVideoId}
                     on:activeLocationChange={handleActiveLocationChange}
+                    on:viewportChange={(e) => {
+                        mapViewportBounds = e.detail.bounds;
+                    }}
                 />
             </div>
         {/if}
@@ -2068,7 +2339,7 @@
         position: sticky;
         top: 0;
         z-index: 30;
-        padding: 1.5rem 2rem .6rem;
+        padding: 1.5rem 2rem 0.1rem;
         background: rgba(0, 0, 0, 0.78);
         backdrop-filter: blur(18px);
         box-shadow: 0 8px 32px -8px rgba(15, 23, 42, 0.4);
@@ -2138,6 +2409,11 @@
     .filter-icon {
         opacity: 0.6;
         flex-shrink: 0;
+        width: 40px;
+        display: flex;
+        justify-content: center;
+        align-items: center; 
+border-right: 1px solid rgba(255, 255, 255, 0.1);        
     }
 
     .filter-input,
@@ -2240,6 +2516,336 @@
     
     .map-places-search:focus-within {
         border: none !important;
+    }
+
+    .map-video-carousel-wrapper {
+        position: relative;
+        background: rgba(255,255,255,0.02);
+        border-top: 1px solid rgba(255,255,255,0.05);
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+        width: 100%;
+        padding: 0.5rem 0;
+        margin-top: 0.5rem;
+    }
+
+    .map-video-carousel {
+        display: flex;
+        gap: 0.5rem;
+        overflow-x: auto;
+        overflow-y: hidden;
+        scroll-behavior: smooth;
+        scrollbar-width: none;
+        -ms-overflow-style: none;
+       
+    }
+
+    .map-video-carousel::-webkit-scrollbar {
+        display: none;
+    }
+
+    .carousel-nav {
+        position: absolute;
+        top: 50%;
+        transform: translateY(-50%);
+        z-index: 10;
+        background: rgba(0, 0, 0, 0.8);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 50%;
+        width: 32px;
+        height: 32px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: white;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        outline: none;
+    }
+
+    .carousel-nav:hover {
+        background: rgba(0, 0, 0, 0.95);
+        border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .carousel-nav svg {
+        width: 16px;
+        height: 16px;
+    }
+
+    .carousel-nav-left {
+        left: 0.5rem;
+    }
+
+    .carousel-nav-right {
+        right: 0.5rem;
+    }
+
+    .carousel-video-card {
+        flex-shrink: 0;
+        width: 50px;
+        border-radius: 10px;
+        border: 2px solid rgb(19, 19, 19);
+        overflow: hidden;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        display: flex;
+        flex-direction: column;
+        outline: none;
+        text-align: left;
+    }
+
+    .carousel-video-card:hover {
+        border-color: rgba(255, 255, 255, 0.2);
+        
+    }
+
+    .carousel-video-card.is-playing {
+        border: 2px solid #d76b1e;
+    }
+
+    .carousel-video-thumbnail {
+        width: 100%;
+        aspect-ratio: 1;
+        background: rgba(0, 0, 0, 0.5);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        position: relative;
+    
+    }
+
+    .carousel-video-thumbnail img {
+        width: 110%;
+        height: 110%;
+        object-fit: cover !important;
+        object-position: center center !important;
+    }
+
+    .carousel-video-placeholder {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: rgba(255, 255, 255, 0.4);
+    }
+
+    .carousel-video-placeholder svg {
+        width: 16px;
+        height: 16px;
+    }
+
+    .carousel-video-playing-overlay {
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #d76b1e;
+        pointer-events: none;
+        z-index: 1;
+    }
+
+    .carousel-logo-mark {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.2rem;
+        width: 1.5rem;
+        height: 1.5rem;
+    }
+
+    .carousel-logo-bar {
+        width: 0.2rem;
+        border-radius: 9999px;
+        background: #d76b1e;
+        transform-origin: bottom center;
+    }
+
+    .carousel-logo-bar--long {
+        height: 1.15rem;
+        animation: waveform-long 1.2s ease-in-out infinite;
+        animation-delay: 0s;
+    }
+
+    .carousel-logo-bar--medium {
+        height: 0.8rem;
+        animation: waveform-medium 1.2s ease-in-out infinite;
+        animation-delay: 0.2s;
+    }
+
+    .carousel-logo-bar--short {
+        height: 0.5rem;
+        animation: waveform-short 1.2s ease-in-out infinite;
+        animation-delay: 0.4s;
+    }
+
+    @keyframes waveform-long {
+        0%, 100% {
+            height: 1.15rem;
+        }
+        50% {
+            height: 0.4rem;
+        }
+    }
+
+    @keyframes waveform-medium {
+        0%, 100% {
+            height: 0.8rem;
+        }
+        50% {
+            height: 1.25rem;
+        }
+    }
+
+    @keyframes waveform-short {
+        0%, 100% {
+            height: 0.5rem;
+        }
+        50% {
+            height: 1.1rem;
+        }
+    }
+
+    .carousel-video-tooltip {
+        position: fixed;
+        z-index: 9999;
+        pointer-events: none;
+        max-width: 300px;
+        background: rgba(0, 0, 0, 0.95);
+        backdrop-filter: blur(12px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 12px;
+        overflow: hidden;
+        box-shadow: 0 20px 40px -10px rgba(0, 0, 0, 0.5);
+        transform: translate(15px, 15px);
+        animation: tooltip-fade-in 0.2s ease-out;
+    }
+
+    @keyframes tooltip-fade-in {
+        from {
+            opacity: 0;
+            transform: translate(15px, 15px) scale(0.95);
+        }
+        to {
+            opacity: 1;
+            transform: translate(15px, 15px) scale(1);
+        }
+    }
+
+    .carousel-tooltip-thumbnail {
+        width: 100%;
+        height: 169px; /* Fixed height: 300px * (9/16) = ~169px */
+        background: rgba(0, 0, 0, 0.5);
+        overflow: hidden;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        position: relative;
+    }
+
+    .carousel-tooltip-thumbnail img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        opacity: 0;
+        transition: opacity 0.2s ease-in;
+    }
+
+    .carousel-tooltip-thumbnail img.tooltip-image-loaded {
+        opacity: 1;
+    }
+
+    .carousel-tooltip-spinner {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        color: rgba(255, 255, 255, 0.6);
+        z-index: 1;
+    }
+
+    .carousel-tooltip-spinner .spinner-icon {
+        animation: tooltip-spin 0.8s linear infinite;
+    }
+
+    @keyframes tooltip-spin {
+        from {
+            transform: rotate(0deg);
+        }
+        to {
+            transform: rotate(360deg);
+        }
+    }
+
+    .carousel-tooltip-placeholder {
+        width: 100%;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: rgba(255, 255, 255, 0.4);
+    }
+
+    .carousel-tooltip-info {
+        padding: 0.75rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+
+    .carousel-tooltip-title {
+        font-size: 0.875rem;
+        font-weight: 600;
+        color: white;
+        line-height: 1.4;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    .carousel-tooltip-meta {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        font-size: 0.75rem;
+        color: rgba(255, 255, 255, 0.7);
+    }
+
+    .carousel-tooltip-author {
+        font-weight: 500;
+    }
+
+    .carousel-tooltip-date {
+        color: rgba(255, 255, 255, 0.5);
+    }
+
+    .carousel-video-info {
+        padding: 0.4rem 0.5rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.15rem;
+    }
+
+    .carousel-video-title {
+        font-size: 0.7rem;
+        font-weight: 600;
+        color: white;
+        line-height: 1.2;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+    }
+
+    .carousel-video-author {
+        font-size: 0.65rem;
+        color: rgba(255, 255, 255, 0.6);
     }
 
     .map-places-search.loading::after {
@@ -2554,20 +3160,6 @@
         border-color: rgba(255, 255, 255, 0.25);
     }
 
-    .playing-indicator {
-        background: rgba(251, 146, 60, 0.15);
-        border-color: rgba(251, 146, 60, 0.4);
-        color: rgb(251, 146, 60);
-        display: inline-flex;
-        align-items: center;
-        gap: 0.375rem;
-        font-size: 0.875rem;
-        font-weight: 500;
-    }
-
-    .playing-indicator svg {
-        flex-shrink: 0;
-    }
 
     .view-toggle-group {
         display: inline-flex;

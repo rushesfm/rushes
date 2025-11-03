@@ -30,7 +30,7 @@
     };
     const videos = $derived($videosStore);
     const users = $derived($usersStore);
-    let activeTab = $state<"keywords" | "date" | "users" | "search" | "map" | "index">("index");
+    let activeTab = $state<"keywords" | "date" | "users" | "search" | "map" | "index">("map");
     let searchQuery = $state("");
 
     // Filter state for Index tab
@@ -66,25 +66,52 @@
     let tooltipPosition = $state({ x: 0, y: 0 });
     let tooltipVisible = $state(false);
     let tooltipImageLoaded = $state(false);
+    let userHasInteractedWithMap = $state(false);
+    let shouldAutoCenterOnVideo = $state(true);
+    
+    // Cache for preview URLs to avoid recalculating
+    const previewUrlCache = new Map<string, string>();
     
     function getPreviewThumbnailUrl(video: typeof videos[0]): string | null {
         if (!video.streamId) return null;
-        // Extract CDN hostname from videoUrl or downloadUrl (like the working example)
+        
+        // Return cached URL if available (for better caching behavior)
+        const cacheKey = video.streamId;
+        if (previewUrlCache.has(cacheKey)) {
+            return previewUrlCache.get(cacheKey)!;
+        }
+        
+        // Extract CDN hostname from videoUrl or url (like the working example)
         const url = video.videoUrl || video.url || '';
         const match = url.match(/https?:\/\/([^\/]+)/);
         if (match && match[1]) {
             const cdnHost = match[1];
-            // Build preview URL: https://cdn-host/streamId/preview.webp?v=timestamp
-            const timestamp = Date.now();
-            return `https://${cdnHost}/${video.streamId}/preview.webp?v=${timestamp}`;
+            // Build preview URL without timestamp for better browser caching
+            // The browser will cache this and only revalidate if needed
+            const previewUrl = `https://${cdnHost}/${video.streamId}/preview.webp`;
+            previewUrlCache.set(cacheKey, previewUrl);
+            return previewUrl;
         }
         // Fallback to env variable if URL extraction fails
         const cdnHost = import.meta.env.PUBLIC_BUNNY_CDN_HOST_NAME || import.meta.env.VITE_BUNNY_CDN_HOST_NAME || '';
         if (cdnHost) {
-            const timestamp = Date.now();
-            return `https://${cdnHost}/${video.streamId}/preview.webp?v=${timestamp}`;
+            const previewUrl = `https://${cdnHost}/${video.streamId}/preview.webp`;
+            previewUrlCache.set(cacheKey, previewUrl);
+            return previewUrl;
         }
         return null;
+    }
+    
+    // Preload preview images for videos currently visible in carousel
+    function preloadPreviewImage(video: typeof videos[0]) {
+        const url = getPreviewThumbnailUrl(video);
+        if (url) {
+            const link = document.createElement('link');
+            link.rel = 'preload';
+            link.as = 'image';
+            link.href = url;
+            document.head.appendChild(link);
+        }
     }
     
     function formatVideoDate(dateString?: string | null): string {
@@ -765,6 +792,9 @@
         const instance = mapRef;
         if (!instance) return;
 
+        // Turn off auto-center when user interacts via breadcrumbs
+        shouldAutoCenterOnVideo = false;
+
         // Set the active breadcrumb level
         activeBreadcrumbLevel = crumb.level;
 
@@ -871,6 +901,16 @@
             mapCarouselContainer.addEventListener('scroll', handleScroll);
             const resizeObserver = new ResizeObserver(() => updateCarouselScrollState());
             resizeObserver.observe(mapCarouselContainer);
+            
+            // Preload preview images for first few visible videos
+            const preloadCount = Math.min(5, mapViewVideos.length);
+            for (let i = 0; i < preloadCount; i++) {
+                const video = mapViewVideos[i];
+                if (video) {
+                    preloadPreviewImage(video.video);
+                }
+            }
+            
             return () => {
                 mapCarouselContainer?.removeEventListener('scroll', handleScroll);
                 resizeObserver.disconnect();
@@ -882,9 +922,54 @@
         // Play the video
         selectedVideo.selectVideo(video.id);
         
-        // Center map on location
+        // Enable auto-center and center map on location when clicking from carousel
+        shouldAutoCenterOnVideo = true;
         if (mapRef) {
             mapRef.zoomToLocation(location, 10);
+        }
+        
+        // Set the final breadcrumb as active after a short delay to allow location update
+        setTimeout(() => {
+            const breadcrumbs = mapBreadcrumbs;
+            if (breadcrumbs.length > 0) {
+                const finalBreadcrumb = breadcrumbs[breadcrumbs.length - 1];
+                activeBreadcrumbLevel = finalBreadcrumb.level;
+            }
+        }, 100);
+    }
+    
+    function toggleAutoCenterOnVideo() {
+        if (!mapRef || !activeVideoId) return;
+        
+        // Toggle the auto-center state
+        shouldAutoCenterOnVideo = !shouldAutoCenterOnVideo;
+        
+        // If toggling ON, also fly to the marker
+        if (shouldAutoCenterOnVideo) {
+            const video = videos.find(v => v.id === activeVideoId);
+            if (!video || !video.locations || video.locations.length === 0) return;
+            
+            const location = filteredLocations.find(loc => loc.videoId === activeVideoId);
+            if (location && mapRef) {
+                // Use special fly animation for recenter button
+                const coords = getLocationCoords(location);
+                if (coords) {
+                    const [lon, lat] = coords;
+                    mapRef.flyToMarker(lon, lat, 10);
+                } else {
+                    // Fallback to zoomToLocation if coordinates aren't available
+                    mapRef.zoomToLocation(location, 10);
+                }
+            }
+            
+            // Set the final breadcrumb as active after a short delay to allow location update
+            setTimeout(() => {
+                const breadcrumbs = mapBreadcrumbs;
+                if (breadcrumbs.length > 0) {
+                    const finalBreadcrumb = breadcrumbs[breadcrumbs.length - 1];
+                    activeBreadcrumbLevel = finalBreadcrumb.level;
+                }
+            }, 100);
         }
     }
 
@@ -1386,16 +1471,8 @@
             </h1> -->
 
             <!-- Tab Switcher -->
-            <div class="flex gap-2 border-b border-white/10 mb-6" class:map-active={activeTab === "map"}>
-                <button
-                    onclick={() => (activeTab = "index")}
-                    class="px-4 py-2 text-sm font-medium transition-colors border-b-2 {activeTab ===
-                    "index"
-                        ? "border-white text-white"
-                        : "border-transparent text-white/60 hover:text-white"} "
-                >
-                    Index
-                </button>
+            <div class="tabs-container flex gap-2 border-b border-white/10" class:map-active={activeTab === "map"}>
+          
                 <button
                     onclick={() => (activeTab = "map")}
                     class="px-4 py-2 text-sm font-medium transition-colors border-b-2 {activeTab ===
@@ -1405,6 +1482,15 @@
                 >
                     Locations
                 </button>
+                <button
+                onclick={() => (activeTab = "index")}
+                class="px-4 py-2 text-sm font-medium transition-colors border-b-2 {activeTab ===
+                "index"
+                    ? "border-white text-white"
+                    : "border-transparent text-white/60 hover:text-white"} "
+            >
+                Dates
+            </button>
                 <button
                     onclick={() => (activeTab = "keywords")}
                     class="px-4 py-2 text-sm font-medium transition-colors border-b-2 {activeTab ===
@@ -1445,8 +1531,8 @@
 
             <!-- Filter Bar (shown for Index tab) -->
             {#if activeTab === "index"}
-                <div class="filters-container mb-6">
-                    <div class="filters-row">
+            <div class="filters-container ">
+                <div class="filters-row">
                         <!-- Search -->
                         <div class="filter-item filter-search">
                             <svg class="filter-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
@@ -1561,7 +1647,7 @@
 
             <!-- Filter Bar (shown for Map tab) -->
             {#if activeTab === "map"}
-                <div class="filters-container mb-6">
+                <div class="filters-container ">
                     <div class="filters-row">
                         <!-- Map Breadcrumbs -->
 
@@ -1592,6 +1678,24 @@
                                 </button>
                             {/each}
                         </nav>
+
+                        <!-- Auto-center on Active Video Toggle Button -->
+                        {#if activeVideoId}
+                            <button
+                                type="button"
+                                class="filter-item recenter-button"
+                                class:active={shouldAutoCenterOnVideo}
+                                onclick={toggleAutoCenterOnVideo}
+                                aria-label={shouldAutoCenterOnVideo ? "Auto-center on currently playing video (enabled)" : "Auto-center on currently playing video (disabled)"}
+                                title={shouldAutoCenterOnVideo ? "Auto-center on currently playing video (enabled)" : "Auto-center on currently playing video (disabled)"}
+                            >
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                    <circle cx="12" cy="12" r="10"></circle>
+                                    <circle cx="12" cy="12" r="3"></circle>
+                                    <path d="M12 1v6m0 6v6M1 12h6m6 0h6"></path>
+                                </svg>
+                            </button>
+                        {/if}
 
                         <!-- Map Search -->
                         <div
@@ -1944,6 +2048,7 @@
                 </div>
             {/if}
         {:else if activeTab === "keywords"}
+        <div class="index-container">
             {#if allKeywords.length > 0}
                 <div
                     class="grid gap-8"
@@ -1983,6 +2088,7 @@
                     <p class="text-white/60">No keywords available yet.</p>
                 </div>
             {/if}
+            </div>
         {:else if activeTab === "date"}
             <!-- Calendar View -->
             <div>
@@ -2101,7 +2207,8 @@
                 {/if}
             </div>
         {:else if activeTab === "users"}
-            <!-- Users View -->
+        <div class="index-container">
+
             {#if allUsers.length > 0}
                 <div
                     class="grid gap-8"
@@ -2148,6 +2255,9 @@
                     <p class="text-white/60">No users available yet.</p>
                 </div>
             {/if}
+
+            </div>
+            
         {:else if activeTab === "search"}
             <!-- Search View -->
             <div>
@@ -2291,10 +2401,14 @@
                     initialCenterLon={lon}
                     initialCenterLat={lat}
                     initialZoom={zoom}
-                    activeVideoId={activeVideoId}
+                    activeVideoId={shouldAutoCenterOnVideo ? activeVideoId : null}
                     on:activeLocationChange={handleActiveLocationChange}
                     on:viewportChange={(e) => {
                         mapViewportBounds = e.detail.bounds;
+                    }}
+                    on:userInteraction={() => {
+                        userHasInteractedWithMap = true;
+                        shouldAutoCenterOnVideo = false;
                     }}
                 />
             </div>
@@ -2319,11 +2433,7 @@
     .browse-content {
         min-height: 100vh;
         padding: 0;
-        padding-left: 2rem;
-        padding-right: 2rem;
-        padding-bottom: 2rem;
-        max-width: 1280px;
-        margin: 0 auto;
+
         position: relative;
     }
 
@@ -2339,21 +2449,18 @@
         position: sticky;
         top: 0;
         z-index: 30;
-        padding: 1.5rem 2rem 0.1rem;
+      
         background: rgba(0, 0, 0, 0.78);
         backdrop-filter: blur(18px);
         box-shadow: 0 8px 32px -8px rgba(15, 23, 42, 0.4);
         margin-bottom: 0;
-        margin-left: -2rem;
-        margin-right: -2rem;
+     
         margin-top: 0;
     }
 
     .browse-content.map-view .browse-header {
         margin-left: 0;
         margin-right: 0;
-        padding-left: 2rem;
-        padding-right: 2rem;
     }
 
     .browse-header.floating h1 {
@@ -2375,15 +2482,33 @@
 
     /* Filter Styles */
     .filters-container {
-        margin-top: 1rem;
+       
     }
 
     .filters-row {
         display: flex;
+        margin: 0rem 2rem;
+  height: 4.2rem;
         gap: 0.75rem;
         flex-wrap: wrap;
         align-items: center;
     }
+
+    .tabs-container {
+        padding: 1rem 0 0;
+        margin: 0rem 2rem;
+    }
+
+    .map-video-carousel-wrapper {
+        position: relative;
+        background: rgba(255,255,255,0.02);
+        border-top: 1px solid rgba(255,255,255,0.05);
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+        width: 100%;
+        padding: .7rem 2rem;
+     
+    }
+
 
     .filter-item {
         display: inline-flex;
@@ -2392,7 +2517,7 @@
         
         transition: all 0.2s ease;
         background: rgba(255, 255, 255, 0.08);
-        border-radius: 9999px;
+   
         border: 1px solid rgba(255, 255, 255, 0.1);
     }
     
@@ -2414,6 +2539,61 @@
         justify-content: center;
         align-items: center; 
 border-right: 1px solid rgba(255, 255, 255, 0.1);        
+    }
+
+ 
+
+    .recenter-button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0.5rem 0.75rem;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 0.5rem;
+        color: rgba(255, 255, 255, 0.7);
+        cursor: pointer;
+        transition: all 0.2s ease;
+        flex-shrink: 0;
+        height: 2.5rem;
+    }
+
+    .recenter-button:hover {
+        background: rgba(255, 255, 255, 0.08);
+        color: rgba(255, 255, 255, 0.9);
+        border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .recenter-button.active {
+        background: #d76b1e;
+        border-color: #d76b1e;
+        color: #ffffff;
+    }
+
+    .recenter-button.active:hover {
+        background: #e87928;
+        border-color: #e87928;
+    }
+
+    .recenter-button svg {
+        width: 18px;
+        height: 18px;
+    }
+
+    :global(.tooltip-content) {
+        background: rgba(255, 255, 255, 0.2);
+        font-family: sans-serif;
+        color: #f8fafc;
+        padding: 0.35rem 0.6rem;
+        border-radius: 0.55rem;
+        font-size: 0.7rem;
+        letter-spacing: 0.08em;
+        white-space: nowrap;
+        box-shadow: 0 18px 35px -24px rgba(15, 23, 42, 0.88);
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        z-index: 9999999;
     }
 
     .filter-input,
@@ -2518,15 +2698,7 @@ border-right: 1px solid rgba(255, 255, 255, 0.1);
         border: none !important;
     }
 
-    .map-video-carousel-wrapper {
-        position: relative;
-        background: rgba(255,255,255,0.02);
-        border-top: 1px solid rgba(255,255,255,0.05);
-        border-bottom: 1px solid rgba(255,255,255,0.05);
-        width: 100%;
-        padding: 0.5rem 0;
-        margin-top: 0.5rem;
-    }
+
 
     .map-video-carousel {
         display: flex;
@@ -2715,7 +2887,7 @@ border-right: 1px solid rgba(255, 255, 255, 0.1);
         position: fixed;
         z-index: 9999;
         pointer-events: none;
-        max-width: 300px;
+        width: 300px;
         background: rgba(0, 0, 0, 0.95);
         backdrop-filter: blur(12px);
         border: 1px solid rgba(255, 255, 255, 0.1);
@@ -3219,6 +3391,7 @@ border-right: 1px solid rgba(255, 255, 255, 0.1);
         display: flex;
         flex-direction: column;
         gap: 3rem;
+        padding: 1.5rem 3rem;
     }
 
     .year-section {

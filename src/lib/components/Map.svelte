@@ -65,6 +65,7 @@
 	let lastFocusedVideoId = $state<string | null>(null);
 	let hasInitialZoomed = $state(false);
 	let isInitialLoad = $state(true);
+	let skipAutoFocus = $state(false);
 
 	const token =
 		import.meta.env.PUBLIC_MAPBOX_ACCESS_TOKEN ??
@@ -105,6 +106,7 @@
 		viewportChange: {
 			bounds: { north: number; south: number; east: number; west: number };
 		};
+		userInteraction: {};
 	}>();
 
 	const ACTIVE_LOCATION_THRESHOLD_DEGREES = 1.2;
@@ -415,13 +417,40 @@
 				zoom: center.zoom,
 				cooperativeGestures: true
 			});
+			let isUserInteraction = false;
+
+			const markUserInteraction = (event: mapboxgl.EventData) => {
+				const mapboxEvent = event as mapboxgl.MapboxEvent<unknown>;
+				if (mapboxEvent.originalEvent) {
+					isUserInteraction = true;
+				}
+			};
+
+			map.on('mousedown', markUserInteraction);
+
+			map.on('touchstart', markUserInteraction);
+
+			// Track wheel events (mouse wheel zoom)
+			map.on('wheel', markUserInteraction);
+
+			// Track zoomstart for any zoom interaction initiated by the user
+			map.on('zoomstart', markUserInteraction);
+			
 			map.on('moveend', () => {
 				updateActiveLocationFromCenter();
 				dispatchViewportChange();
+				if (isUserInteraction) {
+					dispatch('userInteraction', {});
+					isUserInteraction = false;
+				}
 			});
 			
 			map.on('zoomend', () => {
 				dispatchViewportChange();
+				if (isUserInteraction) {
+					dispatch('userInteraction', {});
+					isUserInteraction = false;
+				}
 			});
 			map.once('load', () => {
 				mapReady = true;
@@ -470,6 +499,7 @@
 
 	$effect(() => {
 		if (!mapReady || !hasInitialZoomed) return; // Wait for initial zoom to complete
+		if (skipAutoFocus) return; // Skip if manually recentering with flyToMarker
 		if (!activeVideoId) {
 			lastFocusedVideoId = null;
 			syncMarkers(locations); // Update markers when no active video
@@ -562,6 +592,33 @@ export function flyToCoordinates(lon: number, lat: number, options?: { zoom?: nu
 	setTimeout(() => {
 		updateActiveLocationFromCenter({ force: true });
 	}, 820);
+}
+
+export function flyToMarker(lon: number, lat: number, zoom = 10) {
+	if (!map || !mapReady) return;
+	
+	// Temporarily disable auto-focus to prevent focusOnVideo's jumpTo from interrupting
+	skipAutoFocus = true;
+	
+	// Stop any ongoing animations to prevent conflicts
+	map.stop();
+	
+	// Use flyTo for dramatic flying animation from current position to marker
+	// Ensure essential: true to override prefers-reduced-motion
+	map.flyTo({
+		center: [lon, lat],
+		zoom: zoom,
+		duration: 1500,
+		essential: true,
+		curve: 1.42, // Creates a more dramatic arc
+		speed: 1.2 // Slightly faster for smoother feel
+	});
+	
+	// Re-enable auto-focus after animation completes
+	setTimeout(() => {
+		skipAutoFocus = false;
+		updateActiveLocationFromCenter({ force: true });
+	}, 1600);
 }
 </script>
 

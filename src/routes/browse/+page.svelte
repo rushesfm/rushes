@@ -669,6 +669,12 @@
         return crumbs;
     });
 
+    // Check if breadcrumbs are ready (have more than just "global" or no location)
+    const breadcrumbsReady = $derived.by(() => {
+        if (!mapActiveLocation) return true; // Show "global" only when no location
+        return mapBreadcrumbs.length > 1; // Only show when we have location data
+    });
+
     function handleActiveLocationChange(
         event: CustomEvent<{
             location: MapLocation | null;
@@ -1664,7 +1670,7 @@
 
 
   
-                        <nav class="breadcrumbs" aria-label="Map location breadcrumbs">
+                        <nav class="breadcrumbs" class:ready={breadcrumbsReady} aria-label="Map location breadcrumbs">
                             {#each mapBreadcrumbs as crumb, index (crumb.label)}
                                 {@const isActive = shouldAutoCenterOnVideo ? (index === 3) : (crumb.level === activeBreadcrumbLevel)}
                                 {@const isGlobal = crumb.level === "global"}
@@ -2636,6 +2642,13 @@ border-right: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: .5rem;
   display: inline-flex;
   overflow: hidden;
+  opacity: 0;
+  transition: opacity 0.2s ease-in-out;
+  min-height: 2.5rem;
+}
+
+.breadcrumbs.ready {
+  opacity: 1;
 }
 
 .breadcrumbs__item {
@@ -2646,7 +2659,14 @@ border-right: 1px solid rgba(255, 255, 255, 0.1);
   position: relative;
   font-size: .74rem;
   text-decoration: none;
-  transition: background 0.2s linear;
+  transition: background 0.2s linear, opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
+  opacity: 0;
+  transform: translateX(-4px);
+}
+
+.breadcrumbs.ready .breadcrumbs__item {
+  opacity: 1;
+  transform: translateX(0);
 }
 
 .breadcrumbs__item.first {

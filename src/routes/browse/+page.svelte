@@ -1793,6 +1793,16 @@
                             </button>
                         {/if}
 
+                        <!-- Follow Location Button -->
+                        <button
+                            type="button"
+                            class="filter-item follow-location-button"
+                            aria-label="Follow location"
+                            title="Follow location"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24"><!-- Icon from Material Symbols by Google - https://github.com/google/material-design-icons/blob/master/LICENSE --><path fill="currentColor" d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4s4-1.79 4-4s-1.79-4-4-4m0 10c-3.31 0-6-2.69-6-6s2.69-6 6-6s6 2.69 6 6s-2.69 6-6 6m0-12.5C7 5.5 2.73 9.11 2.73 13.5c0 1.3.5 2.52 1.41 3.52L12 23l7.86-6.01c.91-1 1.41-2.22 1.41-3.49C22.27 9.11 18 5.5 12 5.5m0 16.01l-6.55-5.01c-.75-.69-1.17-1.67-1.17-2.69c0-3.38 3.67-6.31 7.72-6.31s7.72 2.93 7.72 6.31c0 1.02-.42 2-1.17 2.69z"/></svg>
+                        </button>
+
                         <!-- Map Search -->
                         <div
                             class="filter-item filter-search map-places-search"
@@ -2681,6 +2691,31 @@ border-right: 1px solid rgba(255, 255, 255, 0.1);
     }
 
     .recenter-button svg {
+        width: 18px;
+        height: 18px;
+    }
+
+    .follow-location-button {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(255, 255, 255, 0.05);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        color: rgba(255, 255, 255, 0.7);
+        cursor: pointer;
+        transition: all 0.2s ease;
+        height: 2.7rem;
+        width: 2.7rem;
+        flex-shrink: 0;
+    }
+
+    .follow-location-button:hover {
+        background: rgba(255, 255, 255, 0.08);
+        color: rgba(255, 255, 255, 0.9);
+        border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .follow-location-button svg {
         width: 18px;
         height: 18px;
     }

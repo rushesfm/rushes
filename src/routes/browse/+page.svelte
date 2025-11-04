@@ -693,6 +693,19 @@
             normaliseText(admin.city ?? undefined) ||
             normaliseText(admin.fullAddress ?? undefined);
         mapAdminContext = hasInfo ? admin : null;
+        
+        // Update active breadcrumb level when map stops moving (only if autocenter is off)
+        // When autocenter is on, the 4th breadcrumb is always active
+        if (!shouldAutoCenterOnVideo) {
+            // Use a small delay to ensure breadcrumbs have updated
+            setTimeout(() => {
+                const breadcrumbs = mapBreadcrumbs;
+                if (breadcrumbs.length > 0) {
+                    const finalBreadcrumb = breadcrumbs[breadcrumbs.length - 1];
+                    activeBreadcrumbLevel = finalBreadcrumb.level;
+                }
+            }, 50);
+        }
     }
 
     function scheduleMapSearch(query: string) {

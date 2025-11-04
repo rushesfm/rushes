@@ -105,6 +105,7 @@
 		};
 		viewportChange: {
 			bounds: { north: number; south: number; east: number; west: number };
+			zoom: number;
 		};
 		userInteraction: {};
 	}>();
@@ -562,13 +563,16 @@ function dispatchViewportChange() {
 	if (!map || !mapboxModule) return;
 	try {
 		const bounds = map.getBounds();
+		if (!bounds) return;
+		const zoom = map.getZoom();
 		dispatch('viewportChange', {
 			bounds: {
 				north: bounds.getNorth(),
 				south: bounds.getSouth(),
 				east: bounds.getEast(),
 				west: bounds.getWest()
-			}
+			},
+			zoom
 		});
 	} catch (error) {
 		console.warn('Failed to get map bounds:', error);

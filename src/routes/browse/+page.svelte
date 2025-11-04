@@ -30,8 +30,10 @@
     };
     const videos = $derived($videosStore);
     const users = $derived($usersStore);
-    let activeTab = $state<"keywords" | "date" | "users" | "search" | "map" | "index">("index");
+    type TabKey = "keywords" | "date" | "users" | "search" | "map" | "index";
+    let activeTab = $state<TabKey>("index");
     let searchQuery = $state("");
+    let previousActiveTab = $state<TabKey>("index");
 
     // Filter state for Index tab
     let indexSearchQuery = $state("");
@@ -68,6 +70,13 @@
     let tooltipImageLoaded = $state(false);
     let userHasInteractedWithMap = $state(false);
     let shouldAutoCenterOnVideo = $state(true);
+    
+    $effect(() => {
+        if (activeTab === "map" && previousActiveTab !== "map") {
+            shouldAutoCenterOnVideo = true;
+        }
+        previousActiveTab = activeTab;
+    });
     
     // Cache for preview URLs to avoid recalculating
     const previewUrlCache = new Map<string, string>();
@@ -788,6 +797,20 @@
         });
     }
 
+    // Helper function to map zoom level to breadcrumb level
+    // Based on zoom levels used in breadcrumb clicks:
+    // - global: zoom ~3.5 (zoomToWorld maxZoom: 3.5)
+    // - country: zoom 4.5-5.5
+    // - region: zoom 6.5
+    // - place: zoom 10
+    // At zoom 10, if there are only 3 breadcrumbs (no place), region (3rd) should be active
+    function getBreadcrumbLevelFromZoom(zoom: number): "global" | "country" | "region" | "place" {
+        if (zoom <= 4) return "global";
+        if (zoom <= 6) return "country";
+        if (zoom <= 10) return "region"; // Region covers up to zoom 10
+        return "place"; // Place only for zoom > 10
+    }
+
     function handleBreadcrumbClick(crumb: MapBreadcrumb) {
         const instance = mapRef;
         if (!instance) return;
@@ -927,15 +950,7 @@
         if (mapRef) {
             mapRef.zoomToLocation(location, 10);
         }
-        
-        // Set the final breadcrumb as active after a short delay to allow location update
-        setTimeout(() => {
-            const breadcrumbs = mapBreadcrumbs;
-            if (breadcrumbs.length > 0) {
-                const finalBreadcrumb = breadcrumbs[breadcrumbs.length - 1];
-                activeBreadcrumbLevel = finalBreadcrumb.level;
-            }
-        }, 100);
+        // Breadcrumb will be updated automatically via viewportChange event based on zoom level
     }
     
     function toggleAutoCenterOnVideo() {
@@ -962,14 +977,7 @@
                 }
             }
             
-            // Set the final breadcrumb as active after a short delay to allow location update
-            setTimeout(() => {
-                const breadcrumbs = mapBreadcrumbs;
-                if (breadcrumbs.length > 0) {
-                    const finalBreadcrumb = breadcrumbs[breadcrumbs.length - 1];
-                    activeBreadcrumbLevel = finalBreadcrumb.level;
-                }
-            }, 100);
+            // Breadcrumb will be updated automatically via viewportChange event based on zoom level
         }
     }
 
@@ -2406,6 +2414,16 @@
                     on:activeLocationChange={handleActiveLocationChange}
                     on:viewportChange={(e) => {
                         mapViewportBounds = e.detail.bounds;
+                        // When autocenter is on, update breadcrumb active state based on zoom level
+                        if (shouldAutoCenterOnVideo && e.detail.zoom !== undefined) {
+                            const zoomLevel = getBreadcrumbLevelFromZoom(e.detail.zoom);
+                            // Only update if we have breadcrumbs for this level
+                            const breadcrumbs = mapBreadcrumbs;
+                            const hasLevel = breadcrumbs.some(crumb => crumb.level === zoomLevel);
+                            if (hasLevel) {
+                                activeBreadcrumbLevel = zoomLevel;
+                            }
+                        }
                     }}
                     on:userInteraction={() => {
                         userHasInteractedWithMap = true;

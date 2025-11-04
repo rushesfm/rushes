@@ -188,6 +188,57 @@
 		return `${Number(center.lon).toFixed(3)},${Number(center.lat).toFixed(3)}`;
 	}
 
+	function calculateZoomFromGeocode(rawGeocodeResponse: unknown): number {
+		// Default zoom if we can't determine location type
+		const defaultZoom = 8.5;
+		
+		if (!rawGeocodeResponse || typeof rawGeocodeResponse !== 'object') {
+			return defaultZoom;
+		}
+
+		try {
+			const response = rawGeocodeResponse as {
+				features?: Array<{
+					properties?: {
+						feature_type?: string;
+						coordinates?: {
+							accuracy?: string;
+						};
+						context?: {
+							neighborhood?: unknown;
+							address?: unknown;
+						};
+					};
+				}>;
+			};
+
+			if (!response.features || response.features.length === 0) {
+				return defaultZoom;
+			}
+
+			const firstFeature = response.features[0];
+			const properties = firstFeature?.properties;
+			
+			if (!properties) {
+				return defaultZoom;
+			}
+
+			// Check if it's a city location
+			const isCity =
+				(properties.feature_type === 'address' && 
+				 properties.coordinates?.accuracy === 'rooftop') ||
+				(properties.context?.neighborhood !== undefined) ||
+				(properties.context?.address !== undefined);
+
+			// City locations get zoom level ~8.5 (3rd breadcrumb level - city)
+			// Rural locations get zoom level ~6 (2nd breadcrumb level - region)
+			return isCity ? 8.5 : 6;
+		} catch (error) {
+			console.warn('Error calculating zoom from geocode data:', error);
+			return defaultZoom;
+		}
+	}
+
 	let activeLocationKey: string | null = null;
 	let activeLocation: MapLocation | null = null;
 	let lastAdminContext: AdminContext = {};
@@ -380,22 +431,28 @@
 		setActiveLocation(nearest.location, { lon: center.lng, lat: center.lat }, { force: options.force });
 	}
 
-	function focusOnVideo(
-	videoId: string | null,
-	{ instant = false, force = false }: { instant?: boolean; force?: boolean } = {}
+		function focusOnVideo(
+		videoId: string | null,
+		{ instant = false, force = false }: { instant?: boolean; force?: boolean } = {}                                                                         
 ) {
-	if (!map || !mapReady || !videoId) return;
-	const location = findLocationByVideoId(videoId);
-	if (!location) return;
-	const coords = normaliseCoordinates(location);
-	if (!coords) return;
-	const [lon, lat] = coords;
-	// Use a fixed target zoom level (10) to prevent zoom accumulation
-	const targetZoom = 10;
-	// Always use instant positioning when video changes (no animation)
-	map.jumpTo({ center: [lon, lat], zoom: targetZoom });
-	setActiveLocation(location, { lon, lat }, { force: true });
-	lastFocusedVideoId = videoId;
+		if (!map || !mapReady || !videoId) return;
+		const location = findLocationByVideoId(videoId);
+		if (!location) return;
+		const coords = normaliseCoordinates(location);
+		if (!coords) return;
+		const [lon, lat] = coords;
+		
+		// Calculate zoom based on geocode data (rural vs city)
+		const coordsKey = buildCoordKey({ lon, lat });
+		const rawGeocodeResponse = geocodeRawResponseCache.get(coordsKey);
+		const targetZoom = rawGeocodeResponse 
+			? calculateZoomFromGeocode(rawGeocodeResponse)
+			: 8.5; // Default zoom if no geocode data available
+		
+		// Always use instant positioning when video changes (no animation)
+		map.jumpTo({ center: [lon, lat], zoom: targetZoom });
+		setActiveLocation(location, { lon, lat }, { force: true });
+		lastFocusedVideoId = videoId;
 }
 
 	onMount(async () => {

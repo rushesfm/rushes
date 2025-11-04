@@ -30,7 +30,7 @@
     };
     const videos = $derived($videosStore);
     const users = $derived($usersStore);
-    let activeTab = $state<"keywords" | "date" | "users" | "search" | "map" | "index">("map");
+    let activeTab = $state<"keywords" | "date" | "users" | "search" | "map" | "index">("index");
     let searchQuery = $state("");
 
     // Filter state for Index tab
@@ -68,6 +68,13 @@
     let tooltipImageLoaded = $state(false);
     let userHasInteractedWithMap = $state(false);
     let shouldAutoCenterOnVideo = $state(true);
+    
+    // Enable autocenter when map tab is activated
+    $effect(() => {
+        if (activeTab === "map") {
+            shouldAutoCenterOnVideo = true;
+        }
+    });
     
     // Cache for preview URLs to avoid recalculating
     const previewUrlCache = new Map<string, string>();
@@ -840,6 +847,16 @@
 
     const activeVideoId = $derived($selectedVideo.id);
 
+    // Set breadcrumb to region level when autocenter is on and video changes
+    $effect(() => {
+        if (shouldAutoCenterOnVideo && activeVideoId) {
+            // Set region breadcrumb as active when autocenter is on
+            setTimeout(() => {
+                activeBreadcrumbLevel = "region";
+            }, 150);
+        }
+    });
+
     // Helper function to get coordinates from location
     function getLocationCoords(loc: MapLocation): [number, number] | null {
         if (typeof loc.mapLon === 'number' && typeof loc.mapLat === 'number') {
@@ -918,27 +935,24 @@
         }
     });
 
-    function handleMapVideoClick(video: typeof videos[0], location: MapLocation) {
+        function handleMapVideoClick(video: typeof videos[0], location: MapLocation) {                                                                              
         // Play the video
         selectedVideo.selectVideo(video.id);
         
-        // Enable auto-center and center map on location when clicking from carousel
+        // Enable auto-center and center map on location when clicking from carousel                                                                            
         shouldAutoCenterOnVideo = true;
         if (mapRef) {
-            mapRef.zoomToLocation(location, 10);
+            // Use region-level zoom (6.5) when autocenter is on
+            mapRef.zoomToLocation(location, 6.5);
         }
         
-        // Set the final breadcrumb as active after a short delay to allow location update
+        // Set the region breadcrumb as active when autocenter is on
         setTimeout(() => {
-            const breadcrumbs = mapBreadcrumbs;
-            if (breadcrumbs.length > 0) {
-                const finalBreadcrumb = breadcrumbs[breadcrumbs.length - 1];
-                activeBreadcrumbLevel = finalBreadcrumb.level;
-            }
+            activeBreadcrumbLevel = "region";
         }, 100);
     }
     
-    function toggleAutoCenterOnVideo() {
+        function toggleAutoCenterOnVideo() {
         if (!mapRef || !activeVideoId) return;
         
         // Toggle the auto-center state
@@ -947,28 +961,24 @@
         // If toggling ON, also fly to the marker
         if (shouldAutoCenterOnVideo) {
             const video = videos.find(v => v.id === activeVideoId);
-            if (!video || !video.locations || video.locations.length === 0) return;
+            if (!video || !video.locations || video.locations.length === 0) return;                                                                             
             
-            const location = filteredLocations.find(loc => loc.videoId === activeVideoId);
+            const location = filteredLocations.find(loc => loc.videoId === activeVideoId);                                                                      
             if (location && mapRef) {
-                // Use special fly animation for recenter button
+                // Use region-level zoom (6.5) when autocenter is on
                 const coords = getLocationCoords(location);
                 if (coords) {
                     const [lon, lat] = coords;
-                    mapRef.flyToMarker(lon, lat, 10);
+                    mapRef.flyToMarker(lon, lat, 6.5);
                 } else {
-                    // Fallback to zoomToLocation if coordinates aren't available
-                    mapRef.zoomToLocation(location, 10);
+                    // Fallback to zoomToLocation if coordinates aren't available                                                                               
+                    mapRef.zoomToLocation(location, 6.5);
                 }
             }
             
-            // Set the final breadcrumb as active after a short delay to allow location update
+            // Set the region breadcrumb as active when autocenter is on
             setTimeout(() => {
-                const breadcrumbs = mapBreadcrumbs;
-                if (breadcrumbs.length > 0) {
-                    const finalBreadcrumb = breadcrumbs[breadcrumbs.length - 1];
-                    activeBreadcrumbLevel = finalBreadcrumb.level;
-                }
+                activeBreadcrumbLevel = "region";
             }, 100);
         }
     }
@@ -1473,15 +1483,7 @@
             <!-- Tab Switcher -->
             <div class="tabs-container flex gap-2 border-b border-white/10" class:map-active={activeTab === "map"}>
           
-                <button
-                    onclick={() => (activeTab = "map")}
-                    class="px-4 py-2 text-sm font-medium transition-colors border-b-2 {activeTab ===
-                    "map"
-                        ? "border-white text-white"
-                        : "border-transparent text-white/60 hover:text-white"} "
-                >
-                    Locations
-                </button>
+           
                 <button
                 onclick={() => (activeTab = "index")}
                 class="px-4 py-2 text-sm font-medium transition-colors border-b-2 {activeTab ===
@@ -1491,6 +1493,15 @@
             >
                 Dates
             </button>
+            <button
+            onclick={() => (activeTab = "map")}
+            class="px-4 py-2 text-sm font-medium transition-colors border-b-2 {activeTab ===
+            "map"
+                ? "border-white text-white"
+                : "border-transparent text-white/60 hover:text-white"} "
+        >
+            Locations
+        </button>
                 <button
                     onclick={() => (activeTab = "keywords")}
                     class="px-4 py-2 text-sm font-medium transition-colors border-b-2 {activeTab ===
@@ -1532,7 +1543,7 @@
             <!-- Filter Bar (shown for Index tab) -->
             {#if activeTab === "index"}
             <div class="filters-container ">
-                <div class="filters-row">
+                <div class="filters-row border-b border-white/10">
                         <!-- Search -->
                         <div class="filter-item filter-search">
                             <svg class="filter-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
@@ -2257,7 +2268,7 @@
             {/if}
 
             </div>
-            
+
         {:else if activeTab === "search"}
             <!-- Search View -->
             <div>
@@ -2487,7 +2498,7 @@
 
     .filters-row {
         display: flex;
-        margin: 0rem 2rem;
+        margin: .1rem 2rem;
   height: 4.2rem;
         gap: 0.75rem;
         flex-wrap: wrap;
@@ -2495,7 +2506,7 @@
     }
 
     .tabs-container {
-        padding: 1rem 0 0;
+        padding: 1.5rem 0 0;
         margin: 0rem 2rem;
     }
 

@@ -371,23 +371,23 @@
 		setActiveLocation(nearest.location, { lon: center.lng, lat: center.lat }, { force: options.force });
 	}
 
-	function focusOnVideo(
-	videoId: string | null,
-	{ instant = false, force = false }: { instant?: boolean; force?: boolean } = {}
-) {
-	if (!map || !mapReady || !videoId) return;
-	const location = findLocationByVideoId(videoId);
-	if (!location) return;
-	const coords = normaliseCoordinates(location);
-	if (!coords) return;
-	const [lon, lat] = coords;
-	// Use a fixed target zoom level (10) to prevent zoom accumulation
-	const targetZoom = 10;
-	// Always use instant positioning when video changes (no animation)
-	map.jumpTo({ center: [lon, lat], zoom: targetZoom });
-	setActiveLocation(location, { lon, lat }, { force: true });
-	lastFocusedVideoId = videoId;
-}
+		function focusOnVideo(
+		videoId: string | null,
+		{ instant = false, force = false }: { instant?: boolean; force?: boolean } = {}
+	) {
+		if (!map || !mapReady || !videoId) return;
+		const location = findLocationByVideoId(videoId);
+		if (!location) return;
+		const coords = normaliseCoordinates(location);
+		if (!coords) return;
+		const [lon, lat] = coords;
+		// Use region-level zoom (6.5) when autocenter is on (second breadcrumb level)
+		const targetZoom = 6.5;
+		// Always use instant positioning when video changes (no animation)
+		map.jumpTo({ center: [lon, lat], zoom: targetZoom });
+		setActiveLocation(location, { lon, lat }, { force: true });
+		lastFocusedVideoId = videoId;
+	}
 
 	onMount(async () => {
 		if (!browser || !container) return;

@@ -102,6 +102,7 @@
 			location: MapLocation | null;
 			center: { lon: number; lat: number };
 			admin: AdminContext;
+			rawGeocodeResponse?: unknown;
 		};
 		viewportChange: {
 			bounds: { north: number; south: number; east: number; west: number };
@@ -111,7 +112,8 @@
 
 	const ACTIVE_LOCATION_THRESHOLD_DEGREES = 1.2;
 	const geocodeCache = new Map<string, AdminContext | null>();
-	const geocodeRequests = new Map<string, Promise<AdminContext | null>>();
+	const geocodeRawResponseCache = new Map<string, unknown>();
+	const geocodeRequests = new Map<string, Promise<{ admin: AdminContext | null; rawResponse?: unknown } | null>>();
 
 	function getLocationKey(location: MapLocation | null): string | null {
 		if (!location) return null;
@@ -200,17 +202,19 @@
 		const locationKey = getLocationKey(location);
 		if (!locationKey) return;
 
-		const applyContext = (context: AdminContext | null) => {
+				const applyContext = (context: AdminContext | null, rawResponse?: unknown) => {
 			if (!context) return;
 			if (locationKey !== activeLocationKey) return;
-			const merged = normaliseAdminContext(context, baseContext);
+			const merged = normaliseAdminContext(context, baseContext);                                                                             
 			if (contextsEqual(merged, lastAdminContext)) return;
 			lastAdminContext = merged;
-			dispatch('activeLocationChange', { location, center, admin: merged });
+			dispatch('activeLocationChange', { location, center, admin: merged, rawGeocodeResponse: rawResponse });                                                                  
 		};
 
 		if (geocodeCache.has(coordsKey)) {
-			applyContext(geocodeCache.get(coordsKey) ?? null);
+			const cachedAdmin = geocodeCache.get(coordsKey) ?? null;
+			const cachedRaw = geocodeRawResponseCache.get(coordsKey);
+			applyContext(cachedAdmin, cachedRaw);
 			return;
 		}
 
@@ -218,7 +222,7 @@
 			const pending = geocodeRequests.get(coordsKey);
 			const resolved = await pending;
 			if (!resolved) return;
-			applyContext(resolved);
+			applyContext(resolved.admin, resolved.rawResponse);
 			return;
 		}
 
@@ -235,7 +239,10 @@
 					fullAddress: result.fullAddress
 				};
 				geocodeCache.set(coordsKey, admin);
-				return admin;
+				if (result.rawResponse) {
+					geocodeRawResponseCache.set(coordsKey, result.rawResponse);
+				}
+				return { admin, rawResponse: result.rawResponse };
 			})
 			.catch(() => {
 				geocodeCache.set(coordsKey, null);
@@ -248,10 +255,10 @@
 		geocodeRequests.set(coordsKey, request);
 		const resolved = await request;
 		if (!resolved) return;
-		applyContext(resolved);
+		applyContext(resolved.admin, resolved.rawResponse);
 	}
 
-	function setActiveLocation(
+		function setActiveLocation(
 		location: MapLocation | null,
 		center: { lon: number; lat: number },
 		options: { force?: boolean } = {}
@@ -264,9 +271,11 @@
 		activeLocationKey = key;
 		activeLocation = location;
 
-		const baseAdmin = normaliseAdminContext(getAdminFromLocation(location));
+		const baseAdmin = normaliseAdminContext(getAdminFromLocation(location));                                                                        
 		lastAdminContext = baseAdmin;
-		dispatch('activeLocationChange', { location, center, admin: baseAdmin });
+		const coordsKey = buildCoordKey(center);
+		const cachedRaw = geocodeRawResponseCache.get(coordsKey);
+		dispatch('activeLocationChange', { location, center, admin: baseAdmin, rawGeocodeResponse: cachedRaw });                                                                       
 
 		if (location) {
 			updateAdminContextAsync(location, center, baseAdmin);

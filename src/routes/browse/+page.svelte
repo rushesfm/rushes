@@ -52,6 +52,7 @@
     let mapSearchDebounce: ReturnType<typeof setTimeout> | null = null;
     let mapSearchRequestId = 0;
     let mapActiveLocation = $state<MapLocation | null>(null);
+    let stableMapActiveLocation = $state<MapLocation | null>(null);
     let mapAdminContext = $state<{
         country?: string | null;
         region?: string | null;
@@ -70,10 +71,20 @@
     let tooltipImageLoaded = $state(false);
     let userHasInteractedWithMap = $state(false);
     let shouldAutoCenterOnVideo = $state(true);
+    let isInitialMapZoom = $state(false);
     
     $effect(() => {
         if (activeTab === "map" && previousActiveTab !== "map") {
             shouldAutoCenterOnVideo = true;
+            // Capture current location before initial zoom starts
+            stableMapActiveLocation = mapActiveLocation;
+            // Track initial zoom to prevent breadcrumb flashing
+            isInitialMapZoom = true;
+            setTimeout(() => {
+                isInitialMapZoom = false;
+                // Update stable location after zoom completes
+                stableMapActiveLocation = mapActiveLocation;
+            }, 900); // Slightly longer than the 800ms animation duration
         }
         previousActiveTab = activeTab;
     });
@@ -630,9 +641,16 @@
         return filtered;
     });
 
+    // Update stable location only when not in initial zoom
+    $effect(() => {
+        if (!isInitialMapZoom) {
+            stableMapActiveLocation = mapActiveLocation;
+        }
+    });
+
     const mapBreadcrumbs = $derived.by(() => {
         const crumbs: MapBreadcrumb[] = [{ label: "global", level: "global" }];
-        const location = mapActiveLocation;
+        const location = isInitialMapZoom ? stableMapActiveLocation : mapActiveLocation;
         const adminCountry = normaliseText(mapAdminContext?.country ?? undefined);
         const adminRegion = normaliseText(mapAdminContext?.region ?? undefined);
         const adminCity = normaliseText(mapAdminContext?.city ?? undefined);
@@ -667,12 +685,6 @@
             crumbs.push({ label: resolvedPlace, level: "place", location });
         }
         return crumbs;
-    });
-
-    // Check if breadcrumbs are ready (have more than just "global" or no location)
-    const breadcrumbsReady = $derived.by(() => {
-        if (!mapActiveLocation) return true; // Show "global" only when no location
-        return mapBreadcrumbs.length > 1; // Only show when we have location data
     });
 
     function handleActiveLocationChange(
@@ -1670,7 +1682,7 @@
 
 
   
-                        <nav class="breadcrumbs" class:ready={breadcrumbsReady} aria-label="Map location breadcrumbs">
+                        <nav class="breadcrumbs" aria-label="Map location breadcrumbs">
                             {#each mapBreadcrumbs as crumb, index (crumb.label)}
                                 {@const isActive = shouldAutoCenterOnVideo ? (index === 3) : (crumb.level === activeBreadcrumbLevel)}
                                 {@const isGlobal = crumb.level === "global"}
@@ -2642,13 +2654,6 @@ border-right: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: .5rem;
   display: inline-flex;
   overflow: hidden;
-  opacity: 0;
-  transition: opacity 0.2s ease-in-out;
-  min-height: 2.5rem;
-}
-
-.breadcrumbs.ready {
-  opacity: 1;
 }
 
 .breadcrumbs__item {
@@ -2659,14 +2664,7 @@ border-right: 1px solid rgba(255, 255, 255, 0.1);
   position: relative;
   font-size: .74rem;
   text-decoration: none;
-  transition: background 0.2s linear, opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
-  opacity: 0;
-  transform: translateX(-4px);
-}
-
-.breadcrumbs.ready .breadcrumbs__item {
-  opacity: 1;
-  transform: translateX(0);
+  transition: background 0.2s linear;
 }
 
 .breadcrumbs__item.first {

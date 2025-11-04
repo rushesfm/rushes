@@ -1666,7 +1666,7 @@
   
                         <nav class="breadcrumbs" aria-label="Map location breadcrumbs">
                             {#each mapBreadcrumbs as crumb, index (crumb.label)}
-                                {@const isActive = shouldAutoCenterOnVideo && index === 3 ? true : crumb.level === activeBreadcrumbLevel}
+                                {@const isActive = shouldAutoCenterOnVideo ? (index === 3) : (crumb.level === activeBreadcrumbLevel)}
                                 {@const isGlobal = crumb.level === "global"}
                                 <button
                                     type="button"

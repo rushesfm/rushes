@@ -52,7 +52,6 @@
     let mapSearchDebounce: ReturnType<typeof setTimeout> | null = null;
     let mapSearchRequestId = 0;
     let mapActiveLocation = $state<MapLocation | null>(null);
-    let stableMapActiveLocation = $state<MapLocation | null>(null);
     let mapAdminContext = $state<{
         country?: string | null;
         region?: string | null;
@@ -70,21 +69,11 @@
     let tooltipVisible = $state(false);
     let tooltipImageLoaded = $state(false);
     let userHasInteractedWithMap = $state(false);
-    let shouldAutoCenterOnVideo = $state(true);
-    let isInitialMapZoom = $state(false);
+    let shouldAutoCenterOnVideo = $state(false);
     
     $effect(() => {
         if (activeTab === "map" && previousActiveTab !== "map") {
-            shouldAutoCenterOnVideo = true;
-            // Capture current location before initial zoom starts
-            stableMapActiveLocation = mapActiveLocation;
-            // Track initial zoom to prevent breadcrumb flashing
-            isInitialMapZoom = true;
-            setTimeout(() => {
-                isInitialMapZoom = false;
-                // Update stable location after zoom completes
-                stableMapActiveLocation = mapActiveLocation;
-            }, 900); // Slightly longer than the 800ms animation duration
+            // Temporarily disabled: shouldAutoCenterOnVideo = true;
         }
         previousActiveTab = activeTab;
     });
@@ -641,16 +630,9 @@
         return filtered;
     });
 
-    // Update stable location only when not in initial zoom
-    $effect(() => {
-        if (!isInitialMapZoom) {
-            stableMapActiveLocation = mapActiveLocation;
-        }
-    });
-
     const mapBreadcrumbs = $derived.by(() => {
         const crumbs: MapBreadcrumb[] = [{ label: "global", level: "global" }];
-        const location = isInitialMapZoom ? stableMapActiveLocation : mapActiveLocation;
+        const location = mapActiveLocation;
         const adminCountry = normaliseText(mapAdminContext?.country ?? undefined);
         const adminRegion = normaliseText(mapAdminContext?.region ?? undefined);
         const adminCity = normaliseText(mapAdminContext?.city ?? undefined);

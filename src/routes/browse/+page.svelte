@@ -644,17 +644,47 @@
         const adminRegion = normaliseText(mapAdminContext?.region ?? undefined);
         const adminCity = normaliseText(mapAdminContext?.city ?? undefined);
         
-        // Use admin context even when there's no location (from reverse geocoding map center)
+        // Always prefer admin context (from reverse geocoding) over location fields
+        // This prevents video titles or other incorrect data from appearing in breadcrumbs
         let resolvedCountry = adminCountry;
         let resolvedRegion = adminRegion;
         let resolvedPlace = adminCity;
         
-        // If we have a location, prefer its fields but use admin context as fallback
-        if (location) {
+        // Only use location fields if admin context is not available
+        if (location && (!adminCountry || !adminRegion || !adminCity)) {
             const { country, region, place } = extractLocationParts(location);
+            // Only use location fields if admin context doesn't have that level
             resolvedCountry = adminCountry ?? country;
             resolvedRegion = adminRegion ?? region;
             resolvedPlace = adminCity ?? place;
+            
+            // Safety check: never use video title or author as breadcrumb labels
+            const videoTitle = normaliseText(location.videoTitle);
+            const videoAuthor = normaliseText(location.videoAuthor);
+            if (videoTitle) {
+                // Remove video title from any resolved values
+                if (equalsIgnoreCase(resolvedPlace, videoTitle)) {
+                    resolvedPlace = null;
+                }
+                if (equalsIgnoreCase(resolvedRegion, videoTitle)) {
+                    resolvedRegion = null;
+                }
+                if (equalsIgnoreCase(resolvedCountry, videoTitle)) {
+                    resolvedCountry = null;
+                }
+            }
+            if (videoAuthor) {
+                // Remove video author from any resolved values
+                if (equalsIgnoreCase(resolvedPlace, videoAuthor)) {
+                    resolvedPlace = null;
+                }
+                if (equalsIgnoreCase(resolvedRegion, videoAuthor)) {
+                    resolvedRegion = null;
+                }
+                if (equalsIgnoreCase(resolvedCountry, videoAuthor)) {
+                    resolvedCountry = null;
+                }
+            }
         }
         
         // Only show breadcrumbs if we have at least admin context (from reverse geocoding)

@@ -203,10 +203,13 @@
 						feature_type?: string;
 						coordinates?: {
 							accuracy?: string;
+							longitude?: number;
+							latitude?: number;
 						};
 						context?: {
 							neighborhood?: unknown;
 							address?: unknown;
+							locality?: unknown;
 						};
 					};
 				}>;
@@ -223,16 +226,26 @@
 				return defaultZoom;
 			}
 
-			// Check if it's a city location
+			const featureType = properties.feature_type;
+			const context = properties.context || {};
+			const coordinates = properties.coordinates || {};
+			
+			// Check if it's a city location using multiple indicators:
+			// 1. feature_type is "address" (strongest indicator of city location)
+			// 2. feature_type is "address" with rooftop accuracy
+			// 3. Has neighborhood in context (cities have neighborhoods)
+			// 4. Has locality in context (cities have named localities like Brooklyn)
 			const isCity =
-				(properties.feature_type === 'address' && 
-				 properties.coordinates?.accuracy === 'rooftop') ||
-				(properties.context?.neighborhood !== undefined) ||
-				(properties.context?.address !== undefined);
+				featureType === 'address' ||
+				(featureType === 'address' && coordinates.accuracy === 'rooftop') ||
+				context.neighborhood !== undefined ||
+				(context.locality !== undefined && featureType !== 'street');
 
 			// City locations get zoom level ~8.5 (3rd breadcrumb level - city)
 			// Rural locations get zoom level ~6 (2nd breadcrumb level - region)
-			return isCity ? 8.5 : 6;
+			const zoom = isCity ? 8.5 : 6;
+			console.log('Zoom calculation:', { featureType, hasNeighborhood: !!context.neighborhood, hasLocality: !!context.locality, isCity, zoom });
+			return zoom;
 		} catch (error) {
 			console.warn('Error calculating zoom from geocode data:', error);
 			return defaultZoom;
@@ -431,7 +444,7 @@
 		setActiveLocation(nearest.location, { lon: center.lng, lat: center.lat }, { force: options.force });
 	}
 
-		function focusOnVideo(
+		async function focusOnVideo(
 		videoId: string | null,
 		{ instant = false, force = false }: { instant?: boolean; force?: boolean } = {}                                                                         
 ) {
@@ -444,7 +457,17 @@
 		
 		// Calculate zoom based on geocode data (rural vs city)
 		const coordsKey = buildCoordKey({ lon, lat });
-		const rawGeocodeResponse = geocodeRawResponseCache.get(coordsKey);
+		let rawGeocodeResponse = geocodeRawResponseCache.get(coordsKey);
+		
+		// If geocode data isn't cached, trigger fetch and wait for it
+		if (!rawGeocodeResponse) {
+			// Trigger geocode fetch by calling updateAdminContextAsync
+			const baseContext = normaliseAdminContext(getAdminFromLocation(location));
+			await updateAdminContextAsync(location, { lon, lat }, baseContext);
+			// Try to get cached response again after fetch
+			rawGeocodeResponse = geocodeRawResponseCache.get(coordsKey);
+		}
+		
 		const targetZoom = rawGeocodeResponse 
 			? calculateZoomFromGeocode(rawGeocodeResponse)
 			: 8.5; // Default zoom if no geocode data available

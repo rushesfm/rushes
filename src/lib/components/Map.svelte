@@ -43,18 +43,18 @@
     const defaultLon = props.initialCenterLon ?? 0;
     const defaultZoom = props.initialZoom ?? 2;
     
-		if (activeVideoId) {
-			const location = locations.find((loc) => loc.videoId === activeVideoId);
-			if (location) {
-				const coords = normaliseCoordinates(location);
-				if (coords) {
-					const [lon, lat] = coords;
-					return { lon, lat, zoom: getAutoCenterZoom(location) };
-				}
-			}
-		}
-
-		return { lon: defaultLon, lat: defaultLat, zoom: defaultZoom };
+    if (activeVideoId) {
+      const location = locations.find((loc) => loc.videoId === activeVideoId);
+      if (location) {
+        const coords = normaliseCoordinates(location);
+        if (coords) {
+          const [lon, lat] = coords;
+          return { lon, lat, zoom: 9 }; // Start zoomed in on the marker
+        }
+      }
+    }
+    
+    return { lon: defaultLon, lat: defaultLat, zoom: defaultZoom };
   });
 
 	let container = $state<HTMLDivElement | null>(null);
@@ -90,57 +90,6 @@
 			return [loc.coordinates[0], loc.coordinates[1]];
 		}
 		return null;
-	}
-
-	// Heuristic keyword lists that help choose an appropriate zoom level for auto-focus.
-	const CITY_KEYWORDS = ['city', 'urban', 'downtown', 'metropolitan', 'town', 'neighbourhood', 'neighborhood'];
-	const RURAL_KEYWORDS = [
-		'rural',
-		'countryside',
-		'village',
-		'hamlet',
-		'farm',
-		'fields',
-		'pasture',
-		'forest',
-		'mountain',
-		'desert',
-		'park',
-		'wilderness',
-		'island'
-	];
-
-	function classifyLocationDensity(location: MapLocation | null): 'city' | 'rural' {
-		if (!location) return 'rural';
-		const descriptors = [
-			sanitiseName(location.environment),
-			sanitiseName(location.setting),
-			sanitiseName(location.name),
-			sanitiseName(location.place),
-			sanitiseName(location.city),
-			sanitiseName(location.locality),
-			sanitiseName(location.region)
-		]
-			.map((value) => (value ? value.toLowerCase() : null))
-			.filter((value): value is string => Boolean(value));
-
-		if (descriptors.some((text) => RURAL_KEYWORDS.some((keyword) => text.includes(keyword)))) {
-			return 'rural';
-		}
-
-		if (descriptors.some((text) => CITY_KEYWORDS.some((keyword) => text.includes(keyword)))) {
-			return 'city';
-		}
-
-		if (sanitiseName(location.city) || sanitiseName(location.locality) || sanitiseName(location.place)) {
-			return 'city';
-		}
-
-		return 'rural';
-	}
-
-	function getAutoCenterZoom(location: MapLocation | null): number {
-		return classifyLocationDensity(location) === 'city' ? 3 : 2;
 	}
 
 	function clearMarkers() {
@@ -432,7 +381,8 @@
 	const coords = normaliseCoordinates(location);
 	if (!coords) return;
 	const [lon, lat] = coords;
-	const targetZoom = getAutoCenterZoom(location);
+	// Use a fixed target zoom level (10) to prevent zoom accumulation
+	const targetZoom = 10;
 	// Always use instant positioning when video changes (no animation)
 	map.jumpTo({ center: [lon, lat], zoom: targetZoom });
 	setActiveLocation(location, { lon, lat }, { force: true });

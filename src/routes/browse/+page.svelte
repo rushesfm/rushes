@@ -1634,39 +1634,6 @@
             {#if activeTab === "index"}
             <div class="filters-container ">
                 <div class="filters-row border-b border-white/10">
-                        <!-- Search -->
-                        <div class="filter-item filter-search">
-                            <svg class="filter-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
-                                <circle cx="11" cy="11" r="7" />
-                                <line x1="20" y1="20" x2="16.65" y2="16.65" />
-                            </svg>
-                            <input
-                                type="text"
-                                bind:value={indexSearchQuery}
-                                placeholder="Search rushes..."
-                                class="filter-input"
-                            />
-                            {#if indexSearchQuery}
-                                <button
-                                    onclick={() => (indexSearchQuery = "")}
-                                    class="filter-clear"
-                                    aria-label="Clear search"
-                                >
-                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <line x1="18" y1="6" x2="6" y2="18" />
-                                        <line x1="6" y1="6" x2="18" y2="18" />
-                                    </svg>
-                                </button>
-                            {/if}
-                        </div>
-
-                        <!-- Format Filter (Icon Toggles) -->
-                        <TogglePill 
-                            options={formatOptions}
-                            value={selectedFormat}
-                            onValueChange={handleFormatChange}
-                        />
-
                         <!-- Month Selector (Pill UI) with Calendar Popup -->
                         {#if availableMonths.length > 0 && selectedMonthYear && selectedMonth}
                             <div 
@@ -1723,12 +1690,45 @@
                             </div>
                         {/if}
 
+                        <!-- Format Filter (Icon Toggles) -->
+                        <TogglePill 
+                            options={formatOptions}
+                            value={selectedFormat}
+                            onValueChange={handleFormatChange}
+                        />
+
                         <!-- View Mode Toggles -->
                         <TogglePill 
                             options={viewModeOptions}
                             value={viewMode}
                             onValueChange={handleViewModeChange}
                         />
+
+                        <!-- Search -->
+                        <div class="filter-item filter-search index-search-box">
+                            <svg class="filter-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+                                <circle cx="11" cy="11" r="7" />
+                                <line x1="20" y1="20" x2="16.65" y2="16.65" />
+                            </svg>
+                            <input
+                                type="text"
+                                bind:value={indexSearchQuery}
+                                placeholder="Search rushes..."
+                                class="filter-input"
+                            />
+                            {#if indexSearchQuery}
+                                <button
+                                    onclick={() => (indexSearchQuery = "")}
+                                    class="filter-clear"
+                                    aria-label="Clear search"
+                                >
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <line x1="18" y1="6" x2="6" y2="18" />
+                                        <line x1="6" y1="6" x2="18" y2="18" />
+                                    </svg>
+                                </button>
+                            {/if}
+                        </div>
 
                         <!-- Clear Filters -->
                         {#if selectedFormat !== "all" || indexSearchQuery}
@@ -1800,8 +1800,10 @@
                             aria-label="Follow location"
                             title="Follow location"
                         >
-                            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24"><!-- Icon from Material Symbols by Google - https://github.com/google/material-design-icons/blob/master/LICENSE --><path fill="currentColor" d="M12 8c-2.21 0-4 1.79-4 4s1.79 4 4 4s4-1.79 4-4s-1.79-4-4-4m0 10c-3.31 0-6-2.69-6-6s2.69-6 6-6s6 2.69 6 6s-2.69 6-6 6m0-12.5C7 5.5 2.73 9.11 2.73 13.5c0 1.3.5 2.52 1.41 3.52L12 23l7.86-6.01c.91-1 1.41-2.22 1.41-3.49C22.27 9.11 18 5.5 12 5.5m0 16.01l-6.55-5.01c-.75-.69-1.17-1.67-1.17-2.69c0-3.38 3.67-6.31 7.72-6.31s7.72 2.93 7.72 6.31c0 1.02-.42 2-1.17 2.69z"/></svg>
-                            <span>Follow</span>
+                        <!-- <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24"><path fill="currentColor" d="M12 21q-1.868 0-3.51-.709t-2.857-1.923t-1.924-2.858T3 12q0-3.212 1.98-5.658q1.982-2.446 5.14-3.125q.301-.096.539.085t.237.49q0 .212-.115.372t-.294.219q-2.746.54-4.501 2.676Q4.23 9.194 4.23 12q0 3.233 2.268 5.501T12 19.769q1.685 0 3.224-.68t2.605-1.916q.163-.177.374-.196q.21-.02.393.12q.229.178.235.465t-.243.538q-1.33 1.425-3.003 2.162Q13.914 21 12 21m7.77-9q0-2.8-1.778-4.945q-1.777-2.146-4.504-2.672q-.2-.054-.314-.221t-.115-.37q0-.3.248-.476q.247-.176.549-.099q3.105.608 5.125 3.092T21 12q0 .72-.105 1.403q-.104.684-.34 1.31q-.066.283-.323.403t-.54.018q-.206-.078-.295-.272q-.09-.193-.028-.424q.19-.655.295-1.269T19.77 12m-8.269.5H9q-.213 0-.356-.144t-.144-.357t.144-.356T9 11.5h2.5V9q0-.213.144-.356t.357-.144t.356.144T12.5 9v2.5H15q.213 0 .356.144t.144.357t-.144.356T15 12.5h-2.5V15q0 .213-.144.356t-.357.144t-.356-.144T11.5 15z"/></svg> -->
+
+                        <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24"><!-- Icon from Material Symbols by Google - https://github.com/google/material-design-icons/blob/master/LICENSE --><path fill="currentColor" d="M11 11v2q0 .425.288.713T12 14t.713-.288T13 13v-2h2q.425 0 .713-.288T16 10t-.288-.712T15 9h-2V7q0-.425-.288-.712T12 6t-.712.288T11 7v2H9q-.425 0-.712.288T8 10t.288.713T9 11zm1 10.325q-.35 0-.7-.125t-.625-.375Q9.05 19.325 7.8 17.9t-2.087-2.762t-1.275-2.575T4 10.2q0-3.75 2.413-5.975T12 2t5.588 2.225T20 10.2q0 1.125-.437 2.363t-1.275 2.575T16.2 17.9t-2.875 2.925q-.275.25-.625.375t-.7.125"/></svg>
+                            <span>Save Location</span>
                         </button>
 
                         <!-- Map Search -->
@@ -2641,7 +2643,11 @@
         min-width: 200px;
         height: 2.8rem;
         border: 1px solid rgba(255, 255, 255, 0.1);
+    }
 
+    .index-search-box {
+        margin-left: auto;
+        flex: 0 1 auto;
     }
 
     .filter-icon {
@@ -2832,6 +2838,7 @@ border-right: 1px solid rgba(255, 255, 255, 0.1);
         position: relative;
         width: 400px;
         min-width: 400px;
+        height: 2.7rem;
         max-width: 400px;
         flex: 0 0 400px;
         margin-left: auto;

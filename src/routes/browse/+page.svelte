@@ -60,6 +60,7 @@
     } | null>(null);
     let mapRef: MapComponent | null = null;
     let activeBreadcrumbLevel = $state<"global" | "country" | "region" | "place" | null>(null);
+    let userSelectedBreadcrumb = $state(false);
     let mapCarouselContainer = $state<HTMLElement | null>(null);
     let canScrollLeft = $state(false);
     let canScrollRight = $state(false);
@@ -770,9 +771,9 @@
             normaliseText(admin.fullAddress ?? undefined);
         mapAdminContext = hasInfo ? admin : null;
         
-        // Update active breadcrumb level when map stops moving (only if autocenter is off)
-        // When autocenter is on, the 4th breadcrumb is always active
-        if (!shouldAutoCenterOnVideo) {
+        // Update active breadcrumb level when map stops moving (only if autocenter is off and user hasn't manually selected a breadcrumb)
+        // When autocenter is on, the last visible breadcrumb is always active
+        if (!shouldAutoCenterOnVideo && !userSelectedBreadcrumb) {
             // Use a small delay to ensure breadcrumbs have updated
             setTimeout(() => {
                 const breadcrumbs = mapBreadcrumbs;
@@ -893,8 +894,9 @@
         // Turn off auto-center when user interacts via breadcrumbs
         shouldAutoCenterOnVideo = false;
 
-        // Set the active breadcrumb level
+        // Set the active breadcrumb level and mark that user manually selected it
         activeBreadcrumbLevel = crumb.level;
+        userSelectedBreadcrumb = true;
 
         if (crumb.level === "global") {
             instance.zoomToWorld();
@@ -2508,6 +2510,8 @@
                     on:userInteraction={() => {
                         userHasInteractedWithMap = true;
                         shouldAutoCenterOnVideo = false;
+                        // Reset user selected breadcrumb so breadcrumbs can update based on viewport
+                        userSelectedBreadcrumb = false;
                     }}
                 />
             </div>

@@ -371,26 +371,22 @@
 		setActiveLocation(nearest.location, { lon: center.lng, lat: center.lat }, { force: options.force });
 	}
 
-	        function focusOnVideo(
-        videoId: string | null,
-        { instant = false, force = false }: { instant?: boolean; force?: boolean } = {}                                                                         
+	function focusOnVideo(
+	videoId: string | null,
+	{ instant = false, force = false }: { instant?: boolean; force?: boolean } = {}
 ) {
-        if (!map || !mapReady || !videoId) return;
-        const location = findLocationByVideoId(videoId);
-        if (!location) return;
-        const coords = normaliseCoordinates(location);
-        if (!coords) return;
-        const [lon, lat] = coords;
-        // Determine zoom level based on whether location is in a city or rural area
-        const adminContext = getAdminFromLocation(location);
-        // Check if location has city information (city, place, name, setting, etc.)
-        const hasCity = !!(adminContext.city);
-        // Zoom level 3 for cities, 2 for rural areas
-        const targetZoom = hasCity ? 3 : 2;
-        // Always use instant positioning when video changes (no animation)
-        map.jumpTo({ center: [lon, lat], zoom: targetZoom });
-        setActiveLocation(location, { lon, lat }, { force: true });
-        lastFocusedVideoId = videoId;
+	if (!map || !mapReady || !videoId) return;
+	const location = findLocationByVideoId(videoId);
+	if (!location) return;
+	const coords = normaliseCoordinates(location);
+	if (!coords) return;
+	const [lon, lat] = coords;
+	// Use a fixed target zoom level (10) to prevent zoom accumulation
+	const targetZoom = 10;
+	// Always use instant positioning when video changes (no animation)
+	map.jumpTo({ center: [lon, lat], zoom: targetZoom });
+	setActiveLocation(location, { lon, lat }, { force: true });
+	lastFocusedVideoId = videoId;
 }
 
 	onMount(async () => {

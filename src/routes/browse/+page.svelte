@@ -56,7 +56,6 @@
         city?: string | null;
         fullAddress?: string | null;
     } | null>(null);
-    let mapRawGeocodeResponse = $state<unknown>(null);
     let mapRef: MapComponent | null = null;
     let activeBreadcrumbLevel = $state<"global" | "country" | "region" | "place" | null>(null);
     let mapCarouselContainer = $state<HTMLElement | null>(null);
@@ -69,13 +68,6 @@
     let tooltipImageLoaded = $state(false);
     let userHasInteractedWithMap = $state(false);
     let shouldAutoCenterOnVideo = $state(true);
-    
-    // Enable autocenter when locations tab is activated
-    $effect(() => {
-        if (activeTab === "map") {
-            shouldAutoCenterOnVideo = true;
-        }
-    });
     
     // Cache for preview URLs to avoid recalculating
     const previewUrlCache = new Map<string, string>();
@@ -668,17 +660,15 @@
         return crumbs;
     });
 
-        function handleActiveLocationChange(
+    function handleActiveLocationChange(
         event: CustomEvent<{
             location: MapLocation | null;
             center: { lon: number; lat: number };
             admin: { country?: string | null; region?: string | null; city?: string | null; fullAddress?: string | null };
-            rawGeocodeResponse?: unknown;
         }>
     ) {
         const location = event.detail.location ?? null;
         mapActiveLocation = location;
-        mapRawGeocodeResponse = event.detail.rawGeocodeResponse ?? null;
         if (!location) {
             mapAdminContext = null;
             return;
@@ -1690,32 +1680,22 @@
                             {/each}
                         </nav>
 
-                                                <!-- Auto-center on Active Video Toggle Button -->
+                        <!-- Auto-center on Active Video Toggle Button -->
                         {#if activeVideoId}
                             <button
                                 type="button"
                                 class="filter-item recenter-button"
                                 class:active={shouldAutoCenterOnVideo}
                                 onclick={toggleAutoCenterOnVideo}
-                                aria-label={shouldAutoCenterOnVideo ? "Auto-center on currently playing video (enabled)" : "Auto-center on currently playing video (disabled)"}                                                                 
-                                title={shouldAutoCenterOnVideo ? "Auto-center on currently playing video (enabled)" : "Auto-center on currently playing video (disabled)"}                                                                      
+                                aria-label={shouldAutoCenterOnVideo ? "Auto-center on currently playing video (enabled)" : "Auto-center on currently playing video (disabled)"}
+                                title={shouldAutoCenterOnVideo ? "Auto-center on currently playing video (enabled)" : "Auto-center on currently playing video (disabled)"}
                             >
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">                                                              
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                                     <circle cx="12" cy="12" r="10"></circle>
                                     <circle cx="12" cy="12" r="3"></circle>
                                     <path d="M12 1v6m0 6v6M1 12h6m6 0h6"></path>
                                 </svg>
                             </button>
-                        {/if}
-
-                        <!-- Raw Geocode Response Display -->
-                        {#if mapRawGeocodeResponse}
-                            <div class="filter-item raw-geocode-display">
-                                <details class="raw-geocode-details">
-                                    <summary class="raw-geocode-summary">Raw Geocode Data</summary>
-                                    <pre class="raw-geocode-json">{JSON.stringify(mapRawGeocodeResponse, null, 2)}</pre>
-                                </details>
-                            </div>
                         {/if}
 
                         <!-- Map Search -->
@@ -2588,54 +2568,7 @@ border-right: 1px solid rgba(255, 255, 255, 0.1);
     .recenter-button.active {
         background: #d76b1e;
         border-color: #d76b1e;
-    }
-
-    .raw-geocode-display {
-        flex-shrink: 0;
-    }
-
-    .raw-geocode-details {
-        background: rgba(255, 255, 255, 0.05);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 0.5rem;
-        padding: 0.5rem;
-    }
-
-    .raw-geocode-summary {
-        font-size: 0.8125rem;
-        font-weight: 500;
-        color: rgba(255, 255, 255, 0.7);
-        cursor: pointer;
-        padding: 0.25rem 0.5rem;
-        border-radius: 0.25rem;
-        transition: all 0.2s ease;
-        list-style: none;
-    }
-
-    .raw-geocode-summary:hover {
-        background: rgba(255, 255, 255, 0.08);
-        color: rgba(255, 255, 255, 0.9);
-    }
-
-    .raw-geocode-summary::-webkit-details-marker {
-        display: none;
-    }
-
-    .raw-geocode-json {
-        margin-top: 0.5rem;
-        padding: 0.75rem;
-        background: rgba(0, 0, 0, 0.3);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 0.375rem;
-        font-size: 0.75rem;
-        font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', 'Consolas', 'source-code-pro', monospace;
-        color: rgba(255, 255, 255, 0.8);
-        overflow-x: auto;
-        max-width: 600px;
-        max-height: 400px;
-        overflow-y: auto;
-        white-space: pre;
-        line-height: 1.5;
+        color: #ffffff;
     }
 
     .recenter-button.active:hover {

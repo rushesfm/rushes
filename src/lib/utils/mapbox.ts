@@ -5,11 +5,10 @@ const MAPBOX_ACCESS_TOKEN =
 	null;
 
 export interface ReverseGeocodeResult {
-        fullAddress: string | null;
-        country: string | null;
-        region: string | null;
-        city: string | null;
-        rawResponse?: unknown; // Raw JSON response from the API
+	fullAddress: string | null;
+	country: string | null;
+	region: string | null;
+	city: string | null;
 }
 
 export interface SearchPlaceResult {
@@ -139,15 +138,14 @@ export async function reverseGeocode(
 		const main = data.features[0]?.properties;
 		if (!main) return null;
 
-		                const context = main.context ?? {};
+		const context = main.context ?? {};
 
-                return {
-                        fullAddress: sanitise(main.full_address),
-                        country: sanitise(context.country?.name),
-                        region: sanitise(context.region?.name ?? context.place?.name ?? context.locality?.name),                                                
-                        city: sanitise(context.place?.name ?? context.locality?.name),
-                        rawResponse: data // Include the raw JSON response
-                };
+		return {
+			fullAddress: sanitise(main.full_address),
+			country: sanitise(context.country?.name),
+			region: sanitise(context.region?.name ?? context.place?.name ?? context.locality?.name),
+			city: sanitise(context.place?.name ?? context.locality?.name)
+		};
 	} catch (error) {
 		console.warn('Reverse geocoding failed:', error);
 		return null;

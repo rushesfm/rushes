@@ -49,13 +49,7 @@
         const coords = normaliseCoordinates(location);
         if (coords) {
           const [lon, lat] = coords;
-          // Try to get zoom from geocode data if available
-          const coordsKey = `${Number(lon).toFixed(3)},${Number(lat).toFixed(3)}`;
-          const rawGeocodeResponse = geocodeRawResponseCache.get(coordsKey);
-          const zoom = rawGeocodeResponse 
-            ? calculateZoomFromGeocode(rawGeocodeResponse)
-            : 8.5; // Default to city zoom if no geocode data
-          return { lon, lat, zoom };
+          return { lon, lat, zoom: 9 }; // Start zoomed in on the marker
         }
       }
     }
@@ -108,7 +102,6 @@
 			location: MapLocation | null;
 			center: { lon: number; lat: number };
 			admin: AdminContext;
-			rawGeocodeResponse?: unknown;
 		};
 		viewportChange: {
 			bounds: { north: number; south: number; east: number; west: number };
@@ -118,8 +111,7 @@
 
 	const ACTIVE_LOCATION_THRESHOLD_DEGREES = 1.2;
 	const geocodeCache = new Map<string, AdminContext | null>();
-	const geocodeRawResponseCache = new Map<string, unknown>();
-	const geocodeRequests = new Map<string, Promise<{ admin: AdminContext | null; rawResponse?: unknown } | null>>();
+	const geocodeRequests = new Map<string, Promise<AdminContext | null>>();
 
 	function getLocationKey(location: MapLocation | null): string | null {
 		if (!location) return null;
@@ -194,71 +186,6 @@
 		return `${Number(center.lon).toFixed(3)},${Number(center.lat).toFixed(3)}`;
 	}
 
-	function calculateZoomFromGeocode(rawGeocodeResponse: unknown): number {
-		// Default zoom if we can't determine location type
-		const defaultZoom = 8.5;
-		
-		if (!rawGeocodeResponse || typeof rawGeocodeResponse !== 'object') {
-			return defaultZoom;
-		}
-
-		try {
-			const response = rawGeocodeResponse as {
-				features?: Array<{
-					properties?: {
-						feature_type?: string;
-						coordinates?: {
-							accuracy?: string;
-							longitude?: number;
-							latitude?: number;
-						};
-						context?: {
-							neighborhood?: unknown;
-							address?: unknown;
-							locality?: unknown;
-						};
-					};
-				}>;
-			};
-
-			if (!response.features || response.features.length === 0) {
-				return defaultZoom;
-			}
-
-			const firstFeature = response.features[0];
-			const properties = firstFeature?.properties;
-			
-			if (!properties) {
-				return defaultZoom;
-			}
-
-			const featureType = properties.feature_type;
-			const context = properties.context || {};
-			const coordinates = properties.coordinates || {};
-			
-			// Check if it's a city location using multiple indicators:
-			// 1. feature_type is "address" (strongest indicator of city location)
-			// 2. feature_type is "address" with rooftop accuracy
-			// 3. Has neighborhood in context (cities have neighborhoods)
-			// 4. Has locality in context (cities have named localities like Brooklyn)
-			const isCity =
-				featureType === 'address' ||
-				(featureType === 'address' && coordinates.accuracy === 'rooftop') ||
-				context.neighborhood !== undefined ||
-				(context.locality !== undefined && featureType !== 'street');
-
-			// City locations get zoom level ~8.5 (3rd breadcrumb level - city)
-			// Rural locations get zoom level ~6 (2nd breadcrumb level - region)
-			const zoom = isCity ? 8.5 : 6;
-			console.log(isCity ? 'city' : 'rural');
-			console.log('Zoom calculation:', { featureType, hasNeighborhood: !!context.neighborhood, hasLocality: !!context.locality, isCity, zoom });
-			return zoom;
-		} catch (error) {
-			console.warn('Error calculating zoom from geocode data:', error);
-			return defaultZoom;
-		}
-	}
-
 	let activeLocationKey: string | null = null;
 	let activeLocation: MapLocation | null = null;
 	let lastAdminContext: AdminContext = {};
@@ -273,19 +200,17 @@
 		const locationKey = getLocationKey(location);
 		if (!locationKey) return;
 
-				const applyContext = (context: AdminContext | null, rawResponse?: unknown) => {
+		const applyContext = (context: AdminContext | null) => {
 			if (!context) return;
 			if (locationKey !== activeLocationKey) return;
-			const merged = normaliseAdminContext(context, baseContext);                                                                             
+			const merged = normaliseAdminContext(context, baseContext);
 			if (contextsEqual(merged, lastAdminContext)) return;
 			lastAdminContext = merged;
-			dispatch('activeLocationChange', { location, center, admin: merged, rawGeocodeResponse: rawResponse });                                                                  
+			dispatch('activeLocationChange', { location, center, admin: merged });
 		};
 
 		if (geocodeCache.has(coordsKey)) {
-			const cachedAdmin = geocodeCache.get(coordsKey) ?? null;
-			const cachedRaw = geocodeRawResponseCache.get(coordsKey);
-			applyContext(cachedAdmin, cachedRaw);
+			applyContext(geocodeCache.get(coordsKey) ?? null);
 			return;
 		}
 
@@ -293,7 +218,7 @@
 			const pending = geocodeRequests.get(coordsKey);
 			const resolved = await pending;
 			if (!resolved) return;
-			applyContext(resolved.admin, resolved.rawResponse);
+			applyContext(resolved);
 			return;
 		}
 
@@ -310,10 +235,7 @@
 					fullAddress: result.fullAddress
 				};
 				geocodeCache.set(coordsKey, admin);
-				if (result.rawResponse) {
-					geocodeRawResponseCache.set(coordsKey, result.rawResponse);
-				}
-				return { admin, rawResponse: result.rawResponse };
+				return admin;
 			})
 			.catch(() => {
 				geocodeCache.set(coordsKey, null);
@@ -326,10 +248,10 @@
 		geocodeRequests.set(coordsKey, request);
 		const resolved = await request;
 		if (!resolved) return;
-		applyContext(resolved.admin, resolved.rawResponse);
+		applyContext(resolved);
 	}
 
-		function setActiveLocation(
+	function setActiveLocation(
 		location: MapLocation | null,
 		center: { lon: number; lat: number },
 		options: { force?: boolean } = {}
@@ -342,11 +264,9 @@
 		activeLocationKey = key;
 		activeLocation = location;
 
-		const baseAdmin = normaliseAdminContext(getAdminFromLocation(location));                                                                        
+		const baseAdmin = normaliseAdminContext(getAdminFromLocation(location));
 		lastAdminContext = baseAdmin;
-		const coordsKey = buildCoordKey(center);
-		const cachedRaw = geocodeRawResponseCache.get(coordsKey);
-		dispatch('activeLocationChange', { location, center, admin: baseAdmin, rawGeocodeResponse: cachedRaw });                                                                       
+		dispatch('activeLocationChange', { location, center, admin: baseAdmin });
 
 		if (location) {
 			updateAdminContextAsync(location, center, baseAdmin);
@@ -451,57 +371,22 @@
 		setActiveLocation(nearest.location, { lon: center.lng, lat: center.lat }, { force: options.force });
 	}
 
-		async function focusOnVideo(
-		videoId: string | null,
-		{ instant = false, force = false }: { instant?: boolean; force?: boolean } = {}                                                                         
+	function focusOnVideo(
+	videoId: string | null,
+	{ instant = false, force = false }: { instant?: boolean; force?: boolean } = {}
 ) {
-		if (!map || !mapReady || !videoId) return;
-		const location = findLocationByVideoId(videoId);
-		if (!location) return;
-		const coords = normaliseCoordinates(location);
-		if (!coords) return;
-		const [lon, lat] = coords;
-		
-		// Calculate zoom based on geocode data (rural vs city)
-		const coordsKey = buildCoordKey({ lon, lat });
-		let rawGeocodeResponse = geocodeRawResponseCache.get(coordsKey);
-		
-		// If geocode data isn't cached, trigger fetch and wait for it
-		if (!rawGeocodeResponse) {
-			// Trigger geocode fetch by calling updateAdminContextAsync
-			const baseContext = normaliseAdminContext(getAdminFromLocation(location));
-			await updateAdminContextAsync(location, { lon, lat }, baseContext);
-			// Try to get cached response again after fetch
-			rawGeocodeResponse = geocodeRawResponseCache.get(coordsKey);
-		}
-		
-		const targetZoom = rawGeocodeResponse 
-			? calculateZoomFromGeocode(rawGeocodeResponse)
-			: 8.5; // Default zoom if no geocode data available
-		
-		console.log('Setting zoom to:', targetZoom);
-		
-		// Set active location first (before jumping) to ensure context is ready
-		setActiveLocation(location, { lon, lat }, { force: true });
-		
-		// Use a small timeout to ensure any pending map operations complete before setting zoom
-		await new Promise(resolve => setTimeout(resolve, 0));
-		
-		// Always use instant positioning when video changes (no animation)
-		map.jumpTo({ center: [lon, lat], zoom: targetZoom });
-		
-		// Verify zoom was set correctly after a brief delay
-		setTimeout(() => {
-			const actualZoom = map?.getZoom();
-			console.log('Actual zoom after jumpTo:', actualZoom, 'Expected:', targetZoom);
-			// If zoom was reset, set it again
-			if (actualZoom !== undefined && Math.abs(actualZoom - targetZoom) > 0.5) {
-				console.log('Zoom was reset, correcting to:', targetZoom);
-				map?.jumpTo({ center: [lon, lat], zoom: targetZoom });
-			}
-		}, 100);
-		
-		lastFocusedVideoId = videoId;
+	if (!map || !mapReady || !videoId) return;
+	const location = findLocationByVideoId(videoId);
+	if (!location) return;
+	const coords = normaliseCoordinates(location);
+	if (!coords) return;
+	const [lon, lat] = coords;
+	// Use a fixed target zoom level (10) to prevent zoom accumulation
+	const targetZoom = 10;
+	// Always use instant positioning when video changes (no animation)
+	map.jumpTo({ center: [lon, lat], zoom: targetZoom });
+	setActiveLocation(location, { lon, lat }, { force: true });
+	lastFocusedVideoId = videoId;
 }
 
 	onMount(async () => {

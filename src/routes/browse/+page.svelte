@@ -44,6 +44,16 @@
     let listView = $state(false);
     let showMonthCalendarPopup = $state(false);
     
+    // Filter state for Keywords tab
+    let keywordSearchQuery = $state("");
+    let keywordSelectedFormat = $state<string>("all"); // "all", "video", "audio"
+    let keywordListView = $state(false);
+    
+    // Filter state for Users tab
+    let userSearchQuery = $state("");
+    let userSelectedFormat = $state<string>("all"); // "all", "video", "audio"
+    let userListView = $state(false);
+    
     // Filter state for Map tab
     let mapSearchQuery = $state("");
     let mapSearchResults = $state<MapSearchResult[]>([]);
@@ -1074,17 +1084,42 @@
     }
 
     // ===== KEYWORDS LOGIC =====
-    // Extract all unique keywords from videos
+    // Extract all unique keywords from videos (filtered by format and search)
     const allKeywords = $derived.by(() => {
         const keywordSet = new Set<string>();
-        videos.forEach((video) => {
+        let filteredVideos = videos;
+        
+        // Filter by format if not "all"
+        if (keywordSelectedFormat !== "all") {
+            filteredVideos = videos.filter((video) => {
+                if (keywordSelectedFormat === "video") {
+                    return video.format === "video" || !video.format;
+                } else if (keywordSelectedFormat === "audio") {
+                    return video.format === "audio";
+                }
+                return true;
+            });
+        }
+        
+        filteredVideos.forEach((video) => {
             if (video.keywords) {
                 video.keywords.forEach((keyword: string) => {
                     keywordSet.add(keyword);
                 });
             }
         });
-        return Array.from(keywordSet).sort();
+        
+        let keywords = Array.from(keywordSet).sort();
+        
+        // Filter by search query
+        if (keywordSearchQuery.trim()) {
+            const query = keywordSearchQuery.toLowerCase().trim();
+            keywords = keywords.filter((keyword) =>
+                keyword.toLowerCase().includes(query)
+            );
+        }
+        
+        return keywords;
     });
 
     // Group keywords by first letter
@@ -1287,10 +1322,19 @@
 
 
     // ===== USERS LOGIC =====
-    // Get all users sorted alphabetically
+    // Get all users sorted alphabetically (filtered by format and search)
     const allUsers = $derived.by(() => {
-        const userList = users;
-        return [...userList].sort((a, b) => a.name.localeCompare(b.name));
+        let userList = [...users];
+        
+        // Filter by search query
+        if (userSearchQuery.trim()) {
+            const query = userSearchQuery.toLowerCase().trim();
+            userList = userList.filter((user) =>
+                user.name.toLowerCase().includes(query)
+            );
+        }
+        
+        return userList.sort((a, b) => a.name.localeCompare(b.name));
     });
 
     // Group users by first letter
@@ -1736,6 +1780,130 @@
                                 onclick={() => {
                                     selectedFormat = "all";
                                     indexSearchQuery = "";
+                                }}
+                                class="filter-clear-btn"
+                            >
+                                Clear Filters
+                            </button>
+                        {/if}
+                    </div>
+                </div>
+            {/if}
+
+            <!-- Filter Bar (shown for Keywords tab) -->
+            {#if activeTab === "keywords"}
+            <div class="filters-container ">
+                <div class="filters-row border-b border-white/10">
+                        <!-- Format Filter (Icon Toggles) -->
+                        <TogglePill 
+                            options={formatOptions}
+                            value={keywordSelectedFormat}
+                            onValueChange={(value) => (keywordSelectedFormat = value)}
+                        />
+
+                        <!-- View Mode Toggles -->
+                        <TogglePill 
+                            options={viewModeOptions}
+                            value={keywordListView ? "list" : "compact"}
+                            onValueChange={(value) => {
+                                keywordListView = value === "list";
+                            }}
+                        />
+
+                        <!-- Search -->
+                        <div class="filter-item filter-search keywords-search-box">
+                            <svg class="filter-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+                                <circle cx="11" cy="11" r="7" />
+                                <line x1="20" y1="20" x2="16.65" y2="16.65" />
+                            </svg>
+                            <input
+                                type="text"
+                                bind:value={keywordSearchQuery}
+                                placeholder="Search keywords..."
+                                class="filter-input"
+                            />
+                            {#if keywordSearchQuery}
+                                <button
+                                    onclick={() => (keywordSearchQuery = "")}
+                                    class="filter-clear"
+                                    aria-label="Clear search"
+                                >
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <line x1="18" y1="6" x2="6" y2="18" />
+                                        <line x1="6" y1="6" x2="18" y2="18" />
+                                    </svg>
+                                </button>
+                            {/if}
+                        </div>
+
+                        <!-- Clear Filters -->
+                        {#if keywordSelectedFormat !== "all" || keywordSearchQuery}
+                            <button
+                                onclick={() => {
+                                    keywordSelectedFormat = "all";
+                                    keywordSearchQuery = "";
+                                }}
+                                class="filter-clear-btn"
+                            >
+                                Clear Filters
+                            </button>
+                        {/if}
+                    </div>
+                </div>
+            {/if}
+
+            <!-- Filter Bar (shown for Users tab) -->
+            {#if activeTab === "users"}
+            <div class="filters-container ">
+                <div class="filters-row border-b border-white/10">
+                        <!-- Format Filter (Icon Toggles) -->
+                        <TogglePill 
+                            options={formatOptions}
+                            value={userSelectedFormat}
+                            onValueChange={(value) => (userSelectedFormat = value)}
+                        />
+
+                        <!-- View Mode Toggles -->
+                        <TogglePill 
+                            options={viewModeOptions}
+                            value={userListView ? "list" : "compact"}
+                            onValueChange={(value) => {
+                                userListView = value === "list";
+                            }}
+                        />
+
+                        <!-- Search -->
+                        <div class="filter-item filter-search users-search-box">
+                            <svg class="filter-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6">
+                                <circle cx="11" cy="11" r="7" />
+                                <line x1="20" y1="20" x2="16.65" y2="16.65" />
+                            </svg>
+                            <input
+                                type="text"
+                                bind:value={userSearchQuery}
+                                placeholder="Search users..."
+                                class="filter-input"
+                            />
+                            {#if userSearchQuery}
+                                <button
+                                    onclick={() => (userSearchQuery = "")}
+                                    class="filter-clear"
+                                    aria-label="Clear search"
+                                >
+                                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <line x1="18" y1="6" x2="6" y2="18" />
+                                        <line x1="6" y1="6" x2="18" y2="18" />
+                                    </svg>
+                                </button>
+                            {/if}
+                        </div>
+
+                        <!-- Clear Filters -->
+                        {#if userSelectedFormat !== "all" || userSearchQuery}
+                            <button
+                                onclick={() => {
+                                    userSelectedFormat = "all";
+                                    userSearchQuery = "";
                                 }}
                                 class="filter-clear-btn"
                             >
@@ -2645,7 +2813,9 @@
         border: 1px solid rgba(255, 255, 255, 0.1);
     }
 
-    .index-search-box {
+    .index-search-box,
+    .keywords-search-box,
+    .users-search-box {
         margin-left: auto;
         flex: 0 1 auto;
     }
@@ -3393,10 +3563,9 @@ border-right: 1px solid rgba(255, 255, 255, 0.1);
         display: inline-flex;
         align-items: center;
         gap: 0.5rem;
-        padding: 0.5rem 0.75rem;
+        padding: 0.2rem 0.2rem;
         overflow: hidden;
         border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 0.5rem;
         background: rgba(255, 255, 255, 0.08);
     }
 

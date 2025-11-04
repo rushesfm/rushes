@@ -69,11 +69,11 @@
     let tooltipVisible = $state(false);
     let tooltipImageLoaded = $state(false);
     let userHasInteractedWithMap = $state(false);
-    let shouldAutoCenterOnVideo = $state(false);
+    let shouldAutoCenterOnVideo = $state(true);
     
     $effect(() => {
         if (activeTab === "map" && previousActiveTab !== "map") {
-            // Temporarily disabled: shouldAutoCenterOnVideo = true;
+            shouldAutoCenterOnVideo = true;
         }
         previousActiveTab = activeTab;
     });

@@ -636,13 +636,25 @@
         const adminCountry = normaliseText(mapAdminContext?.country ?? undefined);
         const adminRegion = normaliseText(mapAdminContext?.region ?? undefined);
         const adminCity = normaliseText(mapAdminContext?.city ?? undefined);
-        if (!location) {
+        
+        // Use admin context even when there's no location (from reverse geocoding map center)
+        let resolvedCountry = adminCountry;
+        let resolvedRegion = adminRegion;
+        let resolvedPlace = adminCity;
+        
+        // If we have a location, prefer its fields but use admin context as fallback
+        if (location) {
+            const { country, region, place } = extractLocationParts(location);
+            resolvedCountry = adminCountry ?? country;
+            resolvedRegion = adminRegion ?? region;
+            resolvedPlace = adminCity ?? place;
+        }
+        
+        // Only show breadcrumbs if we have at least admin context (from reverse geocoding)
+        if (!resolvedCountry && !resolvedRegion && !resolvedPlace) {
             return crumbs;
         }
-        const { country, region, place } = extractLocationParts(location);
-        const resolvedCountry = adminCountry ?? country;
-        let resolvedRegion = adminRegion ?? region;
-        let resolvedPlace = adminCity ?? place;
+        
         if (resolvedCountry && resolvedRegion && equalsIgnoreCase(resolvedRegion, resolvedCountry)) {
             resolvedRegion = null;
         }
@@ -664,7 +676,7 @@
             });
         }
         if (resolvedPlace) {
-            crumbs.push({ label: resolvedPlace, level: "place", location });
+            crumbs.push({ label: resolvedPlace, level: "place", location: location ?? undefined });
         }
         return crumbs;
     });
@@ -1673,7 +1685,7 @@
                 <div class="filters-container ">
                     <div class="filters-row">
                         <!-- Map Breadcrumbs -->
-                        {#if mapActiveLocation && mapBreadcrumbs.length > 1}
+                        {#if mapBreadcrumbs.length > 1}
                             <nav class="breadcrumbs" aria-label="Map location breadcrumbs">
                                 {#each mapBreadcrumbs as crumb, index (crumb.label)}
                                     {@const isActive = shouldAutoCenterOnVideo ? (index === 3) : (crumb.level === activeBreadcrumbLevel)}

@@ -252,6 +252,60 @@
 		applyContext(resolved);
 	}
 
+	async function updateAdminContextFromCenter(center: { lon: number; lat: number }) {
+		if (!browser) return;
+		const coordsKey = buildCoordKey(center);
+		
+		if (geocodeCache.has(coordsKey)) {
+			const context = geocodeCache.get(coordsKey);
+			if (context) {
+				lastAdminContext = context;
+				dispatch('activeLocationChange', { location: activeLocation, center, admin: context });
+			}
+			return;
+		}
+
+		if (geocodeRequests.has(coordsKey)) {
+			const pending = geocodeRequests.get(coordsKey);
+			const resolved = await pending;
+			if (resolved) {
+				lastAdminContext = resolved;
+				dispatch('activeLocationChange', { location: activeLocation, center, admin: resolved });
+			}
+			return;
+		}
+
+		const request = reverseGeocode(center.lon, center.lat)
+			.then((result) => {
+				if (!result) {
+					geocodeCache.set(coordsKey, null);
+					return null;
+				}
+				const admin: AdminContext = {
+					country: result.country,
+					region: result.region,
+					city: result.city,
+					fullAddress: result.fullAddress
+				};
+				geocodeCache.set(coordsKey, admin);
+				return admin;
+			})
+			.catch(() => {
+				geocodeCache.set(coordsKey, null);
+				return null;
+			})
+			.finally(() => {
+				geocodeRequests.delete(coordsKey);
+			});
+
+		geocodeRequests.set(coordsKey, request);
+		const resolved = await request;
+		if (resolved) {
+			lastAdminContext = resolved;
+			dispatch('activeLocationChange', { location: activeLocation, center, admin: resolved });
+		}
+	}
+
 	function setActiveLocation(
 		location: MapLocation | null,
 		center: { lon: number; lat: number },
@@ -271,6 +325,9 @@
 
 		if (location) {
 			updateAdminContextAsync(location, center, baseAdmin);
+		} else {
+			// When there's no location, still reverse geocode the center for breadcrumbs
+			updateAdminContextFromCenter(center);
 		}
 	}
 
@@ -438,7 +495,7 @@
 			map.on('zoomstart', markUserInteraction);
 			
 			map.on('moveend', () => {
-				updateActiveLocationFromCenter();
+				updateActiveLocationFromCenter({ force: true });
 				dispatchViewportChange();
 				if (isUserInteraction) {
 					dispatch('userInteraction', {});
@@ -447,6 +504,7 @@
 			});
 			
 			map.on('zoomend', () => {
+				updateActiveLocationFromCenter({ force: true });
 				dispatchViewportChange();
 				if (isUserInteraction) {
 					dispatch('userInteraction', {});

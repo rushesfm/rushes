@@ -64,6 +64,7 @@
     let canScrollLeft = $state(false);
     let canScrollRight = $state(false);
     let mapViewportBounds = $state<{ north: number; south: number; east: number; west: number } | null>(null);
+    let mapZoom = $state<number | null>(null);
     let tooltipVideo = $state<typeof videos[0] | null>(null);
     let tooltipPosition = $state({ x: 0, y: 0 });
     let tooltipVisible = $state(false);
@@ -602,6 +603,12 @@
     const lat = $derived(parseFloat($page.url.searchParams.get('lat') ?? '20'));
     const lon = $derived(parseFloat($page.url.searchParams.get('lon') ?? '0'));
     const zoom = $derived(parseInt($page.url.searchParams.get('zoom') ?? '9', 10)); // Start more zoomed in
+    // Initialize mapZoom with initial zoom value
+    $effect(() => {
+        if (activeTab === "map" && mapZoom === null) {
+            mapZoom = zoom;
+        }
+    });
 
     // Filter locations based on URL params and search query
     const filteredLocations = $derived.by<MapLocation[]>(() => {
@@ -679,6 +686,33 @@
             crumbs.push({ label: resolvedPlace, level: "place", location: location ?? undefined });
         }
         return crumbs;
+    });
+
+    // Filter breadcrumbs based on zoom level
+    const visibleBreadcrumbs = $derived.by(() => {
+        const allCrumbs = mapBreadcrumbs;
+        const zoom = mapZoom;
+        
+        // If zoom is not available yet, show all breadcrumbs
+        if (zoom === null) {
+            return allCrumbs;
+        }
+        
+        // Zoom thresholds:
+        // Country view: zoom < 6 → show global + country (indices 0, 1)
+        // Region view: 6 <= zoom < 9 → show global + country + region (indices 0, 1, 2)
+        // Place view: zoom >= 9 → show all (indices 0, 1, 2, 3)
+        
+        if (zoom < 6) {
+            // Country level - show only global and country
+            return allCrumbs.filter((_, index) => index <= 1);
+        } else if (zoom < 9) {
+            // Region level - show global, country, and region
+            return allCrumbs.filter((_, index) => index <= 2);
+        } else {
+            // Place level - show all breadcrumbs
+            return allCrumbs;
+        }
     });
 
     function handleActiveLocationChange(
@@ -1685,10 +1719,11 @@
                 <div class="filters-container ">
                     <div class="filters-row">
                         <!-- Map Breadcrumbs -->
-                        {#if mapBreadcrumbs.length > 1}
+                        {#if visibleBreadcrumbs.length > 1}
                             <nav class="breadcrumbs" aria-label="Map location breadcrumbs">
-                                {#each mapBreadcrumbs as crumb, index (crumb.label)}
-                                    {@const isActive = shouldAutoCenterOnVideo ? (index === 3) : (crumb.level === activeBreadcrumbLevel)}
+                                {#each visibleBreadcrumbs as crumb, index (crumb.label)}
+                                    {@const isLastVisible = index === visibleBreadcrumbs.length - 1}
+                                    {@const isActive = shouldAutoCenterOnVideo ? isLastVisible : (crumb.level === activeBreadcrumbLevel)}
                                     {@const isGlobal = crumb.level === "global"}
                                     <button
                                         type="button"
@@ -2438,6 +2473,7 @@
                     on:activeLocationChange={handleActiveLocationChange}
                     on:viewportChange={(e) => {
                         mapViewportBounds = e.detail.bounds;
+                        mapZoom = e.detail.zoom;
                     }}
                     on:userInteraction={() => {
                         userHasInteractedWithMap = true;

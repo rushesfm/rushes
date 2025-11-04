@@ -1660,34 +1660,32 @@
                 <div class="filters-container ">
                     <div class="filters-row">
                         <!-- Map Breadcrumbs -->
-
-
-
-  
-                        <nav class="breadcrumbs" aria-label="Map location breadcrumbs">
-                            {#each mapBreadcrumbs as crumb, index (crumb.label)}
-                                {@const isActive = shouldAutoCenterOnVideo ? (index === 3) : (crumb.level === activeBreadcrumbLevel)}
-                                {@const isGlobal = crumb.level === "global"}
-                                <button
-                                    type="button"
-                                    class="breadcrumbs__item {index === 0 ? 'first' : ''}"
-                                    class:is-active={isActive}
-                                    onclick={() => handleBreadcrumbClick(crumb)}
-                                    aria-current={isActive ? "page" : undefined}
-                                    aria-label={isGlobal ? "Global view" : crumb.label}
-                                >
-                                    {#if isGlobal}
-                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                            <circle cx="12" cy="12" r="10"></circle>
-                                            <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
-                                            <path d="M2 12h20"></path>
-                                        </svg>
-                                    {:else}
-                                        {crumb.label}
-                                    {/if}
-                                </button>
-                            {/each}
-                        </nav>
+                        {#if mapActiveLocation && mapBreadcrumbs.length > 1}
+                            <nav class="breadcrumbs" aria-label="Map location breadcrumbs">
+                                {#each mapBreadcrumbs as crumb, index (crumb.label)}
+                                    {@const isActive = shouldAutoCenterOnVideo ? (index === 3) : (crumb.level === activeBreadcrumbLevel)}
+                                    {@const isGlobal = crumb.level === "global"}
+                                    <button
+                                        type="button"
+                                        class="breadcrumbs__item {index === 0 ? 'first' : ''}"
+                                        class:is-active={isActive}
+                                        onclick={() => handleBreadcrumbClick(crumb)}
+                                        aria-current={isActive ? "page" : undefined}
+                                        aria-label={isGlobal ? "Global view" : crumb.label}
+                                    >
+                                        {#if isGlobal}
+                                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                                                <circle cx="12" cy="12" r="10"></circle>
+                                                <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"></path>
+                                                <path d="M2 12h20"></path>
+                                            </svg>
+                                        {:else}
+                                            {crumb.label}
+                                        {/if}
+                                    </button>
+                                {/each}
+                            </nav>
+                        {/if}
 
                         <!-- Auto-center on Active Video Toggle Button -->
                         {#if activeVideoId}

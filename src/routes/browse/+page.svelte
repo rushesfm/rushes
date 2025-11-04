@@ -69,7 +69,7 @@
     let userHasInteractedWithMap = $state(false);
     let shouldAutoCenterOnVideo = $state(true);
     
-    // Enable autocenter when map tab is activated
+    // Enable autocenter when locations tab is activated
     $effect(() => {
         if (activeTab === "map") {
             shouldAutoCenterOnVideo = true;
@@ -847,16 +847,6 @@
 
     const activeVideoId = $derived($selectedVideo.id);
 
-    // Set breadcrumb to region level when autocenter is on and video changes
-    $effect(() => {
-        if (shouldAutoCenterOnVideo && activeVideoId) {
-            // Set region breadcrumb as active when autocenter is on
-            setTimeout(() => {
-                activeBreadcrumbLevel = "region";
-            }, 150);
-        }
-    });
-
     // Helper function to get coordinates from location
     function getLocationCoords(loc: MapLocation): [number, number] | null {
         if (typeof loc.mapLon === 'number' && typeof loc.mapLat === 'number') {
@@ -935,24 +925,27 @@
         }
     });
 
-        function handleMapVideoClick(video: typeof videos[0], location: MapLocation) {                                                                              
+    function handleMapVideoClick(video: typeof videos[0], location: MapLocation) {
         // Play the video
         selectedVideo.selectVideo(video.id);
         
-        // Enable auto-center and center map on location when clicking from carousel                                                                            
+        // Enable auto-center and center map on location when clicking from carousel
         shouldAutoCenterOnVideo = true;
         if (mapRef) {
-            // Use region-level zoom (6.5) when autocenter is on
-            mapRef.zoomToLocation(location, 6.5);
+            mapRef.zoomToLocation(location, 10);
         }
         
-        // Set the region breadcrumb as active when autocenter is on
+        // Set the final breadcrumb as active after a short delay to allow location update
         setTimeout(() => {
-            activeBreadcrumbLevel = "region";
+            const breadcrumbs = mapBreadcrumbs;
+            if (breadcrumbs.length > 0) {
+                const finalBreadcrumb = breadcrumbs[breadcrumbs.length - 1];
+                activeBreadcrumbLevel = finalBreadcrumb.level;
+            }
         }, 100);
     }
     
-        function toggleAutoCenterOnVideo() {
+    function toggleAutoCenterOnVideo() {
         if (!mapRef || !activeVideoId) return;
         
         // Toggle the auto-center state
@@ -961,24 +954,28 @@
         // If toggling ON, also fly to the marker
         if (shouldAutoCenterOnVideo) {
             const video = videos.find(v => v.id === activeVideoId);
-            if (!video || !video.locations || video.locations.length === 0) return;                                                                             
+            if (!video || !video.locations || video.locations.length === 0) return;
             
-            const location = filteredLocations.find(loc => loc.videoId === activeVideoId);                                                                      
+            const location = filteredLocations.find(loc => loc.videoId === activeVideoId);
             if (location && mapRef) {
-                // Use region-level zoom (6.5) when autocenter is on
+                // Use special fly animation for recenter button
                 const coords = getLocationCoords(location);
                 if (coords) {
                     const [lon, lat] = coords;
-                    mapRef.flyToMarker(lon, lat, 6.5);
+                    mapRef.flyToMarker(lon, lat, 10);
                 } else {
-                    // Fallback to zoomToLocation if coordinates aren't available                                                                               
-                    mapRef.zoomToLocation(location, 6.5);
+                    // Fallback to zoomToLocation if coordinates aren't available
+                    mapRef.zoomToLocation(location, 10);
                 }
             }
             
-            // Set the region breadcrumb as active when autocenter is on
+            // Set the final breadcrumb as active after a short delay to allow location update
             setTimeout(() => {
-                activeBreadcrumbLevel = "region";
+                const breadcrumbs = mapBreadcrumbs;
+                if (breadcrumbs.length > 0) {
+                    const finalBreadcrumb = breadcrumbs[breadcrumbs.length - 1];
+                    activeBreadcrumbLevel = finalBreadcrumb.level;
+                }
             }, 100);
         }
     }

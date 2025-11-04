@@ -244,6 +244,7 @@
 			// City locations get zoom level ~8.5 (3rd breadcrumb level - city)
 			// Rural locations get zoom level ~6 (2nd breadcrumb level - region)
 			const zoom = isCity ? 8.5 : 6;
+			console.log(isCity ? 'city' : 'rural');
 			console.log('Zoom calculation:', { featureType, hasNeighborhood: !!context.neighborhood, hasLocality: !!context.locality, isCity, zoom });
 			return zoom;
 		} catch (error) {

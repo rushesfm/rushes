@@ -49,7 +49,13 @@
         const coords = normaliseCoordinates(location);
         if (coords) {
           const [lon, lat] = coords;
-          return { lon, lat, zoom: 9 }; // Start zoomed in on the marker
+          // Try to get zoom from geocode data if available
+          const coordsKey = `${Number(lon).toFixed(3)},${Number(lat).toFixed(3)}`;
+          const rawGeocodeResponse = geocodeRawResponseCache.get(coordsKey);
+          const zoom = rawGeocodeResponse 
+            ? calculateZoomFromGeocode(rawGeocodeResponse)
+            : 8.5; // Default to city zoom if no geocode data
+          return { lon, lat, zoom };
         }
       }
     }
@@ -473,9 +479,28 @@
 			? calculateZoomFromGeocode(rawGeocodeResponse)
 			: 8.5; // Default zoom if no geocode data available
 		
+		console.log('Setting zoom to:', targetZoom);
+		
+		// Set active location first (before jumping) to ensure context is ready
+		setActiveLocation(location, { lon, lat }, { force: true });
+		
+		// Use a small timeout to ensure any pending map operations complete before setting zoom
+		await new Promise(resolve => setTimeout(resolve, 0));
+		
 		// Always use instant positioning when video changes (no animation)
 		map.jumpTo({ center: [lon, lat], zoom: targetZoom });
-		setActiveLocation(location, { lon, lat }, { force: true });
+		
+		// Verify zoom was set correctly after a brief delay
+		setTimeout(() => {
+			const actualZoom = map?.getZoom();
+			console.log('Actual zoom after jumpTo:', actualZoom, 'Expected:', targetZoom);
+			// If zoom was reset, set it again
+			if (actualZoom !== undefined && Math.abs(actualZoom - targetZoom) > 0.5) {
+				console.log('Zoom was reset, correcting to:', targetZoom);
+				map?.jumpTo({ center: [lon, lat], zoom: targetZoom });
+			}
+		}, 100);
+		
 		lastFocusedVideoId = videoId;
 }
 

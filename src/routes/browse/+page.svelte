@@ -1789,11 +1789,7 @@
                                 aria-label={shouldAutoCenterOnVideo ? "Auto-center on currently playing video (enabled)" : "Auto-center on currently playing video (disabled)"}
                                 title={shouldAutoCenterOnVideo ? "Auto-center on currently playing video (enabled)" : "Auto-center on currently playing video (disabled)"}
                             >
-                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                                    <circle cx="12" cy="12" r="10"></circle>
-                                    <circle cx="12" cy="12" r="3"></circle>
-                                    <path d="M12 1v6m0 6v6M1 12h6m6 0h6"></path>
-                                </svg>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24"><!-- Icon from Material Symbols by Google - https://github.com/google/material-design-icons/blob/master/LICENSE --><path fill="currentColor" d="M5 21q-.825 0-1.412-.587T3 19v-3q0-.425.288-.712T4 15t.713.288T5 16v3h3q.425 0 .713.288T9 20t-.288.713T8 21zm14 0h-3q-.425 0-.712-.288T15 20t.288-.712T16 19h3v-3q0-.425.288-.712T20 15t.713.288T21 16v3q0 .825-.587 1.413T19 21M3 8V5q0-.825.588-1.412T5 3h3q.425 0 .713.288T9 4t-.288.713T8 5H5v3q0 .425-.288.713T4 9t-.712-.288T3 8m16 0V5h-3q-.425 0-.712-.288T15 4t.288-.712T16 3h3q.825 0 1.413.588T21 5v3q0 .425-.288.713T20 9t-.712-.288T19 8m-7 7q-1.25 0-2.125-.875T9 12t.875-2.125T12 9t2.125.875T15 12t-.875 2.125T12 15"/></svg>
                             </button>
                         {/if}
 
@@ -2617,7 +2613,7 @@
         display: inline-flex;
         align-items: center;
         gap: 0.5rem;
-        
+        height: 2.8rem;
         transition: all 0.2s ease;
         background: rgba(255, 255, 255, 0.08);
    
@@ -2632,6 +2628,9 @@
     .filter-search {
         flex: 1 1 200px;
         min-width: 200px;
+        height: 2.8rem;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+
     }
 
     .filter-icon {
@@ -2650,15 +2649,18 @@ border-right: 1px solid rgba(255, 255, 255, 0.1);
         display: flex;
         align-items: center;
         justify-content: center;
-        padding: 0.5rem 0.75rem;
         background: rgba(255, 255, 255, 0.05);
         border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 0.5rem;
         color: rgba(255, 255, 255, 0.7);
         cursor: pointer;
         transition: all 0.2s ease;
+        height:2.7rem;
+        width: 2.7rem;
+        display: flex;
+        align-items: center;
+        justify-content: center;
         flex-shrink: 0;
-        height: 2.5rem;
+      
     }
 
     .recenter-button:hover {
@@ -2668,7 +2670,7 @@ border-right: 1px solid rgba(255, 255, 255, 0.1);
     }
 
     .recenter-button.active {
-        background: #d76b1e;
+        background: #ec6c11;
         border-color: #d76b1e;
         color: #ffffff;
     }
@@ -2726,9 +2728,9 @@ border-right: 1px solid rgba(255, 255, 255, 0.1);
     /* --- Your Original CSS Variables --- */
     .breadcrumbs {
   border: 1px solid #303030;
-  border-radius: .5rem;
   display: inline-flex;
   overflow: hidden;
+  height: 2.8rem;
 }
 
 .breadcrumbs__item {
@@ -2737,7 +2739,7 @@ border-right: 1px solid rgba(255, 255, 255, 0.1);
   outline: none;
   padding: .8em 1em .8em 1.7em;
   position: relative;
-  font-size: .74rem;
+  font-size: .8rem;
   text-decoration: none;
   transition: background 0.2s linear;
 }
@@ -2793,8 +2795,7 @@ border-right: 1px solid rgba(255, 255, 255, 0.1);
         min-width: 400px;
         max-width: 400px;
         flex: 0 0 400px;
-        border-radius: 0 !important;
-        border: none !important;
+        margin-left: auto;
     }
     
     .map-places-search:focus-within {

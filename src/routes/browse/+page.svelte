@@ -3393,8 +3393,11 @@ border-right: 1px solid rgba(255, 255, 255, 0.1);
         display: inline-flex;
         align-items: center;
         gap: 0.5rem;
-        padding: 0.5rem 0;
+        padding: 0.5rem 0.75rem;
         overflow: hidden;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+        border-radius: 0.5rem;
+        background: rgba(255, 255, 255, 0.08);
     }
 
     .calendar-popup {
